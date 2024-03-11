@@ -68,11 +68,11 @@ import htsjdk.variant.vcf.VCFReader;
 */
 
 public class HtsjdkUtils {
-	
+
 	static boolean pathHasSuffix(Path path,final String suffix) {
 		return path.getFileName().toString().endsWith(suffix);
 	}
-	
+
 	static List<String> extractSamples(final Path path) throws IOException  {
 		if(FileExtensions.VCF_LIST.stream().anyMatch(EXT->pathHasSuffix(path,EXT))) {
 			return extractVcfHeader(path).getGenotypeSamples();
@@ -91,7 +91,7 @@ public class HtsjdkUtils {
 				}
 		throw new IOException("cannot extract samples from "+path);
 		}
-	
+
 	static List<String> extractContigs(final Path path) throws IOException  {
 		if(pathHasSuffix(path,".gz") ) {
 			final Path tbi = path.resolveSibling(path.getFileName().toString() + FileExtensions.TABIX_INDEX);
@@ -126,7 +126,6 @@ public class HtsjdkUtils {
 		throw new IOException("cannot extract chromosomes from "+path);
 		}
 
-	
 	static SAMSequenceDictionary extractDictionary(final Path path) throws IOException  {
 		final SAMSequenceDictionary dict;
 		if(FileExtensions.VCF_LIST.stream().anyMatch(EXT->pathHasSuffix(path,EXT))) {

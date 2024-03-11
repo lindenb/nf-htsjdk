@@ -22,10 +22,8 @@ import htsjdk.samtools.SAMException
 
 
 /**
- * Example plugin extension showing how to implement a basic
- * channel factory method, a channel operator and a custom function.
  *
- * @author : jorge <jorge.aguilera@seqera.io>
+ * @author : Pierre Lindenbaum univ-nantes.fr
  *
  */
 @Slf4j
@@ -109,21 +107,21 @@ class HtsjdkExtension extends PluginExtensionPoint {
 
 
     @Operator
-    DataflowWriteChannel faidx(DataflowReadChannel source) {
-        final target = CH.createBy(source)
+    DataflowWriteChannel faidx(DataflowReadChannel source, Map params = null) {
+        if(params==null) params=[:]
+	//validate params
+	for(Object k: params.keySet()) {
+		throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
+		}
+
+
+	final target = CH.createBy(source)
         final next = {
-		//target.bind(">>>>>>> "+it+" "+it.class)
-		System.err.println(">>>>>>> "+it+" "+it.class)
 		final def htsfile = (java.nio.file.Path)it;
 		final def dict  = SAMSequenceDictionaryExtractor.extractDictionary(htsfile)
 		if(dict==null) {
 			throw new SAMException("Cannot extract dictionary from \""+ htsfile + "\". Fasta files must be indexed TODO");
 			}
-		//target.bind([name:it,x:"Goodbye $it".toString(),length:123]);
-		//target.bind(Channel.of(L))
-		//addToList(target,L)
-		//if(iter.hasNext()) target.bind(iter.next())
-		//target.bind(iter.hasNext()?iter.next():null)
 		dict.getSequences().each{V->target.bind(["contig":V.getSequenceName(),"length":V.getSequenceLength(),"file":htsfile])}
 		}
         final done = { target.bind(Channel.STOP) }
