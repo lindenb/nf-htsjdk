@@ -32,6 +32,41 @@ import htsjdk.variant.vcf.VCFFileReader;
 import htsjdk.variant.vcf.VCFHeader;
 import htsjdk.variant.vcf.VCFReader;
 
+
+/** TODO
+
+ def source = targetObj instanceof List ? findSource((List)targetObj) : targetObj
+
+    def findSource( List tuple ) {
+
+        if( elem >= 0 )
+            return tuple.get(elem)
+
+        // find the elem-th item having Path or File type
+        int pos = elem != null ? -elem : 1
+        int count = 0
+        for( int i=0; i<tuple.size(); i++ ) {
+            def it = tuple[i]
+            if(  it instanceof Path || it instanceof File ) {
+                if( ++count == pos ) {
+                    elem = i
+                    return tuple.get(i)
+                }
+            }
+        }
+
+        // -- not found, if default was null just return the first item
+        if( elem == null ) {
+            elem = 0
+            return tuple.get(0)
+        }
+
+        // -- otherwise if a `elem` value was specified but not found, raise an exception
+        throw new IllegalArgumentException("Cannot find splittable file (elem=$elem)")
+}
+
+*/
+
 public class HtsjdkUtils {
 	
 	static boolean pathHasSuffix(Path path,final String suffix) {
