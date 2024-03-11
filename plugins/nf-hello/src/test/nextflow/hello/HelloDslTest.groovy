@@ -107,19 +107,20 @@ class HelloDslTest extends Dsl2Spec{
     }
 
 
-    def 'should store a goodbye2222' () {
+    def 'test with faidx' () {
         when:
         def SCRIPT = '''
             include {faidx} from 'plugin/nf-hello'
             channel
                 .fromPath('../../data/rotavirus_rf.fa')
                 .faidx()
-		.view()
+		.filter{it.contig.equals("RF11")}
+		.map{it.length}
             '''
         and:
         def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()
         then:
-        result.val == 'Goodbye folks'
+        (result.val as int )== 666
         result.val == Channel.STOP
         
     }
