@@ -1,6 +1,9 @@
 
 config ?= compileClasspath
 
+./plugins/nf-hello/build/libs/nf-hello-0.5.0.jar : ./plugins/nf-hello/src/main/nextflow/hello/HelloExtension.groovy
+	./gradlew jar
+
 ifdef module 
 mm = :${module}:
 else 

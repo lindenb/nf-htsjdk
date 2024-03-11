@@ -51,9 +51,17 @@ sourceSets {
 
 ext{
     nextflowVersion = '24.01.0-edge'
+    htsjdkVersion = '4.1.0'
 }
 
+
+
+
 dependencies {
+   //api group: 'com.github.samtools', name:'htsjdk',version:'4.1.0'
+  // api 'com.github.samtools:htsjdk:4.1.0'
+    implementation 'com.github.samtools:htsjdk:4.1.0'
+
     // This dependency is exported to consumers, that is to say found on their compile classpath.
     compileOnly "io.nextflow:nextflow:$nextflowVersion"
     compileOnly 'org.slf4j:slf4j-api:1.7.10'

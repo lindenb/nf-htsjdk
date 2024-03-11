@@ -106,4 +106,22 @@ class HelloDslTest extends Dsl2Spec{
         result.val == Channel.STOP
     }
 
+
+    def 'should store a goodbye2222' () {
+        when:
+        def SCRIPT = '''
+            include {faidx} from 'plugin/nf-hello'
+            channel
+                .fromPath('../../data/rotavirus_rf.fa')
+                .faidx()
+		.view()
+            '''
+        and:
+        def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()
+        then:
+        result.val == 'Goodbye folks'
+        result.val == Channel.STOP
+        
+    }
+
 }
