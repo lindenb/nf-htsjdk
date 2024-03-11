@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package nextflow.hello
+package nextflow.htsjdk
 
 import groovy.transform.CompileStatic
 import nextflow.Session
@@ -26,12 +26,12 @@ import nextflow.trace.TraceObserverFactory
  * @author Paolo Di Tommaso <paolo.ditommaso@gmail.com>
  */
 @CompileStatic
-class HelloFactory implements TraceObserverFactory {
+class HtsjdkFactory implements TraceObserverFactory {
 
     @Override
     Collection<TraceObserver> create(Session session) {
         final result = new ArrayList()
-        result.add( new HelloObserver() )
+        result.add( new HtsjdkObserver() )
         return result
     }
 }

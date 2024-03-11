@@ -14,22 +14,23 @@
  * limitations under the License.
  */
 
-package nextflow.hello
+package nextflow.htsjdk
 
-import groovy.transform.CompileStatic
-import nextflow.plugin.BasePlugin
-import nextflow.plugin.Scoped
-import org.pf4j.PluginWrapper
+import nextflow.Session
+import spock.lang.Specification
 
 /**
- * Implements the Hello plugins entry point
  *
  * @author Paolo Di Tommaso <paolo.ditommaso@gmail.com>
  */
-@CompileStatic
-class HelloPlugin extends BasePlugin {
+class HtsjdkFactoryTest extends Specification {
 
-    HelloPlugin(PluginWrapper wrapper) {
-        super(wrapper)
+    def 'should return observer' () {
+        when:
+        def result = new HtsjdkFactory().create(Mock(Session))
+        then:
+        result.size()==1
+        result[0] instanceof HtsjdkObserver
     }
+
 }

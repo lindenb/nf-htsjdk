@@ -14,23 +14,29 @@
  * limitations under the License.
  */
 
-package nextflow.hello
+package nextflow.htsjdk
 
+import groovy.transform.CompileStatic
+import groovy.util.logging.Slf4j
 import nextflow.Session
-import spock.lang.Specification
+import nextflow.trace.TraceObserver
 
 /**
+ * Example workflow events observer
  *
  * @author Paolo Di Tommaso <paolo.ditommaso@gmail.com>
  */
-class HelloFactoryTest extends Specification {
+@Slf4j
+@CompileStatic
+class HtsjdkObserver implements TraceObserver {
 
-    def 'should return observer' () {
-        when:
-        def result = new HelloFactory().create(Mock(Session))
-        then:
-        result.size()==1
-        result[0] instanceof HelloObserver
+    @Override
+    void onFlowCreate(Session session) {
+        log.info "Pipeline is starting! 🚀"
     }
 
+    @Override
+    void onFlowComplete() {
+        log.info "Pipeline complete! 👋"
+    }
 }

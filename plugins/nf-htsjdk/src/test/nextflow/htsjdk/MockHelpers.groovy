@@ -1,4 +1,4 @@
-package nextflow.hello
+package nextflow.htsjdk
 
 import groovy.util.logging.Slf4j
 import groovyx.gpars.dataflow.DataflowBroadcast

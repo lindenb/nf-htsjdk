@@ -1,4 +1,4 @@
-package nextflow.hello
+package nextflow.htsjdk
 
 import java.nio.file.Files
 import java.util.jar.Manifest
@@ -17,12 +17,12 @@ import java.nio.file.Path
 
 
 /**
- * Unit test for Hello DSL
+ * Unit test for Htsjdk DSL
  *
  * @author : jorge <jorge.aguilera@seqera.io>
  */
 @Timeout(10)
-class HelloDslTest extends Dsl2Spec{
+class HtsjdkDslTest extends Dsl2Spec{
 
     @Shared String pluginsMode
 
@@ -66,11 +66,11 @@ class HelloDslTest extends Dsl2Spec{
     def 'should perform a hi and create a channel' () {
         when:
         def SCRIPT = '''
-            include {reverse} from 'plugin/nf-hello'
+            include {reverse} from 'plugin/nf-htsjdk'
             channel.reverse('hi!') 
             '''
         and:
-        def result = new MockScriptRunner([hello:[prefix:'>>']]).setScript(SCRIPT).execute()
+        def result = new MockScriptRunner([htsjdk:[prefix:'>>']]).setScript(SCRIPT).execute()
         then:
         result.val == 'hi!'.reverse()
         result.val == Channel.STOP
@@ -79,7 +79,7 @@ class HelloDslTest extends Dsl2Spec{
     def 'should store a goodbye' () {
         when:
         def SCRIPT = '''
-            include {goodbye} from 'plugin/nf-hello'
+            include {goodbye} from 'plugin/nf-htsjdk'
             channel
                 .of('folks')
                 .goodbye() 
@@ -95,7 +95,7 @@ class HelloDslTest extends Dsl2Spec{
     def 'can use an imported function' () {
         when:
         def SCRIPT = '''
-            include {randomString} from 'plugin/nf-hello'
+            include {randomString} from 'plugin/nf-htsjdk'
             channel
                 .of( randomString(20) )                
             '''
@@ -110,7 +110,7 @@ class HelloDslTest extends Dsl2Spec{
     def 'test with faidx' () {
         when:
         def SCRIPT = '''
-            include {faidx} from 'plugin/nf-hello'
+            include {faidx} from 'plugin/nf-htsjdk'
             channel
                 .fromPath('../../data/rotavirus_rf.fa')
                 .faidx()

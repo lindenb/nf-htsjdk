@@ -1,0 +1,2 @@
+nextflow.htsjdk.HtsjdkFactory
+nextflow.htsjdk.HtsjdkExtension

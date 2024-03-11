@@ -1,4 +1,4 @@
-package nextflow.hello
+package nextflow.htsjdk
 
 
 import groovy.transform.CompileStatic
@@ -30,25 +30,25 @@ import htsjdk.samtools.SAMException
  */
 @Slf4j
 @CompileStatic
-class HelloExtension extends PluginExtensionPoint {
+class HtsjdkExtension extends PluginExtensionPoint {
     /*
      * A session hold information about current execution of the script
      */
     private Session session
 
     /*
-     * A Custom config extracted from nextflow.config under hello tag
+     * A Custom config extracted from nextflow.config under htsjdk tag
      * nextflow.config
      * ---------------
      * docker{
      *   enabled = true
      * }
      * ...
-     * hello{
+     * htsjdk{
      *    prefix = 'Mrs'
      * }
      */
-     private HelloConfig config
+     private HtsjdkConfig config
 
     /*
      * nf-core initializes the plugin once loaded and session is ready
@@ -57,7 +57,7 @@ class HelloExtension extends PluginExtensionPoint {
     @Override
     protected void init(Session session) {
         this.session = session
-        this.config = new HelloConfig(session.config.navigate('hello') as Map)
+        this.config = new HtsjdkConfig(session.config.navigate('htsjdk') as Map)
     }
 
     /*
