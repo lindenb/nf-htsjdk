@@ -114,8 +114,8 @@ class HtsjdkDslTest extends Dsl2Spec{
             channel
                 .fromPath('../../data/rotavirus_rf.fa')
                 .faidx()
-		.filter{it.contig.equals("RF11")}
-		.map{it.length}
+		.filter{it[1].equals("RF11")}
+		.map{it[2]}
             '''
         and:
         def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()

@@ -16,16 +16,17 @@ import nextflow.plugin.extension.PluginExtensionPoint
 import htsjdk.variant.utils.SAMSequenceDictionaryExtractor
 import htsjdk.samtools.SAMSequenceDictionary
 import htsjdk.samtools.SAMException 
+import java.util.Arrays;
+import htsjdk.samtools.util.FileExtensions;
+import nextflow.htsjdk.HtsjdkUtils;
 
 
 
 
 
 /**
- * Example plugin extension showing how to implement a basic
- * channel factory method, a channel operator and a custom function.
  *
- * @author : jorge <jorge.aguilera@seqera.io>
+ * @author : Pierre Lindenbaum univ-nantes.fr
  *
  */
 @Slf4j
@@ -60,86 +61,110 @@ class HtsjdkExtension extends PluginExtensionPoint {
         this.config = new HtsjdkConfig(session.config.navigate('htsjdk') as Map)
     }
 
-    /*
-     * {@code reverse} is a `producer` method and will be available to the script because:
-     *
-     * - it's public
-     * - it returns a DataflowWriteChannel
-     * - it's marked with the @Factory annotation
-     *
-     * The method can require arguments but it's not mandatory, it depends of the business logic of the method.
-     *
-     */
-    @Factory
-    DataflowWriteChannel reverse(String message) {
-        final channel = CH.create()
-        session.addIgniter((action) -> reverseImpl(channel, message))
-        return channel
-    }
-
-    private void reverseImpl(DataflowWriteChannel channel, String message) {
-        channel.bind(message.reverse());
-        channel.bind(Channel.STOP)
-    }
-
-    /*
-    * {@code goodbye} is a *consumer* method as it receives values from a channel to perform some logic.
-    *
-    * Consumer methods are introspected by nextflow-core and include into the DSL if the method:
-    *
-    * - it's public
-    * - it returns a DataflowWriteChannel
-    * - it has only one arguments of DataflowReadChannel class
-    * - it's marked with the @Operator annotation 
-    *
-    * a consumer method needs to proportionate 2 closures:
-    * - a closure to consume items (one by one)
-    * - a finalizer closure
-    *
-    * in this case `goodbye` will consume a message and will store it as an upper case
-    */
-    @Operator
-    DataflowWriteChannel goodbye(DataflowReadChannel source) {
-        final target = CH.createBy(source)
-        final next = { target.bind("Goodbye $it".toString());}
-        final done = { target.bind(Channel.STOP) }
-        DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
-        return target
-    }
-
-
-    @Operator
-    DataflowWriteChannel faidx(DataflowReadChannel source) {
-        final target = CH.createBy(source)
-        final next = {
-		//target.bind(">>>>>>> "+it+" "+it.class)
-		System.err.println(">>>>>>> "+it+" "+it.class)
-		final def htsfile = (java.nio.file.Path)it;
-		final def dict  = SAMSequenceDictionaryExtractor.extractDictionary(htsfile)
-		if(dict==null) {
-			throw new SAMException("Cannot extract dictionary from \""+ htsfile + "\". Fasta files must be indexed TODO");
+	
+	private Object bind2(object, List keyValues) {
+		if(object instanceof List) {
+			def list = []
+			for(int i=0;i< keyValues.size();i+=2) {
+				list.add(keyValues.get(i+1));
+				}
+			return List.class.cast(object).plus(list);
 			}
-		//target.bind([name:it,x:"Goodbye $it".toString(),length:123]);
-		//target.bind(Channel.of(L))
-		//addToList(target,L)
-		//if(iter.hasNext()) target.bind(iter.next())
-		//target.bind(iter.hasNext()?iter.next():null)
-		dict.getSequences().each{V->target.bind(["contig":V.getSequenceName(),"length":V.getSequenceLength(),"file":htsfile])}
+		else if(object instanceof Map) {
+			def hash = [:]
+			for(int i=0;i< keyValues.size();i+=2) {
+				hash.put(keyValues.get(i), keyValues.get(i+1));
+				}
+			return Map.class.cast(object).plus(hash)
+			}
+		else {
+			return bind2([object],keyValues);
+			}
 		}
+
+
+
+    @Operator
+    DataflowWriteChannel build(DataflowReadChannel source, Map params = null) {
+        if(params==null) params=[:]	
+		//validate params
+		for(Object k: params.keySet()) {
+			if(HtsjdkUtils.KEY_ELEMENT.equals(k)) continue;
+			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
+			}
+
+
+	final target = CH.createBy(source)
+        final next = {
+			def htsfile = HtsjdkUtils.findHtsSource(it, params.get(HtsjdkUtils.KEY_ELEMENT),null);
+			def dict  = htsfile.extractDictionary();
+			def build = HtsjdkUtils.findBuild(dict)
+			target.bind(bind2(it,[
+					"chrom_count",dict.size(),
+					"dict_md5",dict.md5(),
+					"organism",(build==null?null:build.getOrganism()),
+					"build",(build==null?null:build.getId())
+					]))	
+			}
         final done = { target.bind(Channel.STOP) }
         DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
         return target
-    }
+    	}
+
+	
+
+    @Operator
+    DataflowWriteChannel dictionary(DataflowReadChannel source, Map params = null) {
+        if(params==null) params=[:]	
+		//validate params
+		for(Object k: params.keySet()) {
+			if(HtsjdkUtils.KEY_ELEMENT.equals(k)) continue;
+			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
+			}
 
 
-    /*
-     * Generate a random string
-     *
-     * Using @Function annotation we allow this function can be imported from the pipeline script
-     */
-    @Function
-    String randomString(int length=9){
-        new Random().with {(1..length).collect {(('a'..'z')).join(null)[ nextInt((('a'..'z')).join(null).length())]}.join(null)}
-    }
+		final target = CH.createBy(source)
+        final next = {
+			def htsfile = HtsjdkUtils.findHtsSource(it, params.get(HtsjdkUtils.KEY_ELEMENT),null);
+			def dict  = htsfile.extractDictionary();
+			dict.getSequences().each{
+				V->target.bind(bind2(it,[
+					"tid",V.getSequenceIndex(),
+					"chrom",V.getSequenceName(),
+					"chromLength", V.getSequenceLength(),
+					"altNames", new java.util.ArrayList(V.getAlternativeSequenceNames())
+					]))
+				}
+			}
+        final done = { target.bind(Channel.STOP) }
+        DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
+        return target
+    	}
+		
+	@Operator
+	DataflowWriteChannel samples(DataflowReadChannel source, Map params = null) {
+		def att = null;
+		if(params==null) params=[:]
+		//validate params
+		for(Object k: params.keySet()) {
+			if(HtsjdkUtils.KEY_ELEMENT.equals(k)) continue;
+			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
+			}
 
+
+		final target = CH.createBy(source)
+		final next = {
+			def htsfile = HtsjdkUtils.findHtsSource(it, params.get(HtsjdkUtils.KEY_ELEMENT),null);
+			def samples  = htsfile.extractSamples();
+			samples.each{
+				V->target.bind(bind2(it,[
+					"sample",V
+					]))
+				}
+			}
+		final done = { target.bind(Channel.STOP) }
+		DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
+		return target
+		}
+		
 }

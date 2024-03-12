@@ -1,55 +1,6 @@
-# nf-hello plugin 
+# nf-htsjdk plugin 
  
-This project contains a simple Nextflow plugin called `nf-hello` which provides examples of different plugin extensions:
-
-- A custom trace observer that prints a message when the workflow starts and when the workflow completes
-- A custom channel factory called `reverse`
-- A custom operator called `goodbye`
-- A custom function called `randomString`
-
-NOTE: If you want to use this project as a starting point for a custom plugin, you must rename the `plugins/nf-hello` folder and update `settings.gradle` with your plugin name.
-
-See the [Nextflow documentation](https://nextflow.io/docs/latest/plugins.html) for more information about developing plugins.
-
-## Plugin structure
-                    
-- `settings.gradle`
-    
-    Gradle project settings. 
-
-- `plugins/nf-hello`
-    
-    The plugin implementation base directory.
-
-- `plugins/nf-hello/build.gradle` 
-    
-    Plugin Gradle build file. Project dependencies should be added here.
-
-- `plugins/nf-hello/src/resources/META-INF/MANIFEST.MF` 
-    
-    Manifest file defining the plugin attributes e.g. name, version, etc. The attribute `Plugin-Class` declares the plugin main class. This class should extend the base class `nextflow.plugin.BasePlugin` e.g. `nextflow.hello.HelloPlugin`.
-
-- `plugins/nf-hello/src/resources/META-INF/extensions.idx`
-    
-    This file declares one or more extension classes provided by the plugin. Each line should contain the fully qualified name of a Java class that implements the `org.pf4j.ExtensionPoint` interface (or a sub-interface).
-
-- `plugins/nf-hello/src/main` 
-
-    The plugin implementation sources.
-
-- `plugins/nf-hello/src/test` 
-
-    The plugin unit tests. 
-
-## Plugin classes
-
-- `HelloConfig`: shows how to handle options from the Nextflow configuration
-
-- `HelloExtension`: shows how to create custom channel factories, operators, and fuctions that can be included into pipeline scripts
-
-- `HelloFactory` and `HelloObserver`: shows how to react to workflow events with custom behavior
-
-- `HelloPlugin`: the plugin entry point
+This project contains a simple Nextflow plugin called `nf-htsjdk` which provides operators to handle HTS files (BAM, VCF, FASTA) in nextflow.
 
 ## Unit testing 
 
