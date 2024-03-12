@@ -1,3 +1,27 @@
+/*
+The MIT License (MIT)
+
+Copyright (c) 2024 Pierre Lindenbaum
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+*/
 package nextflow.htsjdk
 
 
@@ -102,6 +126,7 @@ class HtsjdkExtension extends PluginExtensionPoint {
 			target.bind(bind2(it,[
 					"chrom_count",dict.size(),
 					"dict_md5",dict.md5(),
+					"dict_length",dict.getReferenceLength(),
 					"organism",(build==null?null:build.getOrganism()),
 					"build",(build==null?null:build.getId())
 					]))	
@@ -143,11 +168,12 @@ class HtsjdkExtension extends PluginExtensionPoint {
 		
 	@Operator
 	DataflowWriteChannel samples(DataflowReadChannel source, Map params = null) {
-		def att = null;
 		if(params==null) params=[:]
+		def enableEmpty = (params.getOrDefault(HtsjdkUtils.KEY_ENABLE_EMPTY,false) as boolean);
 		//validate params
 		for(Object k: params.keySet()) {
 			if(HtsjdkUtils.KEY_ELEMENT.equals(k)) continue;
+			if(HtsjdkUtils.KEY_ENABLE_EMPTY.equals(k)) continue;
 			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
 			}
 
@@ -156,6 +182,11 @@ class HtsjdkExtension extends PluginExtensionPoint {
 		final next = {
 			def htsfile = HtsjdkUtils.findHtsSource(it, params.get(HtsjdkUtils.KEY_ELEMENT),null);
 			def samples  = htsfile.extractSamples();
+			if(enableEmpty  && samples.isEmpty()) {
+				target.bind(bind2(it,[
+					"sample",HtsjdkUtils.NO_SAMPLE
+					]))
+				}
 			samples.each{
 				V->target.bind(bind2(it,[
 					"sample",V
@@ -166,5 +197,36 @@ class HtsjdkExtension extends PluginExtensionPoint {
 		DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
 		return target
 		}
-		
+	
+	@Operator
+	DataflowWriteChannel mappedContigs(DataflowReadChannel source, Map params = null) {
+		if(params==null) params=[:]
+		def enableEmpty = (params.getOrDefault(HtsjdkUtils.KEY_ENABLE_EMPTY,false) as boolean);
+		//validate params
+		for(Object k: params.keySet()) {
+			if(HtsjdkUtils.KEY_ELEMENT.equals(k)) continue;
+			if(HtsjdkUtils.KEY_ENABLE_EMPTY.equals(k)) continue;
+			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
+			}
+
+
+		final target = CH.createBy(source)
+		final next = {
+			def htsfile = HtsjdkUtils.findHtsSource(it, params.get(HtsjdkUtils.KEY_ELEMENT),null);
+			def samples  = htsfile.extractMappedContigs();
+			if(enableEmpty  && samples.isEmpty()) {
+				target.bind(bind2(it,[
+					"contig",HtsjdkUtils.NO_CONTIG
+					]))
+				}
+			samples.each{
+				V->target.bind(bind2(it,[
+					"contig",V
+					]))
+				}
+			}
+		final done = { target.bind(Channel.STOP) }
+		DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
+		return target
+		}	
 }

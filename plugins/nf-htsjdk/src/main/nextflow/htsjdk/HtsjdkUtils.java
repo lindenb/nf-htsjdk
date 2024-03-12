@@ -1,3 +1,27 @@
+/*
+The MIT License (MIT)
+
+Copyright (c) 2024 Pierre Lindenbaum
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+*/
 package nextflow.htsjdk;
 
 import java.io.BufferedInputStream;
@@ -12,13 +36,23 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
+
+import javax.xml.namespace.QName;
+import javax.xml.stream.XMLEventReader;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.events.Attribute;
+import javax.xml.stream.events.EndElement;
+import javax.xml.stream.events.StartElement;
+import javax.xml.stream.events.XMLEvent;
+
 
 import htsjdk.samtools.BAMIndex;
 import htsjdk.samtools.BAMIndexMetaData;
@@ -53,34 +87,32 @@ import htsjdk.samtools.util.StringUtil;
 public class HtsjdkUtils {
 	
 	static final String KEY_ELEMENT="element";
+	static final String KEY_ENABLE_EMPTY="enableEmpty";
+	static final String NO_SAMPLE=".";
+	static final String NO_CONTIG=".";
 	
 	public static interface Build {
 	    public boolean match(SAMSequenceDictionary dict);
 	    public String getOrganism();
+	    public default String getVersion() { return ".";}
 	    public String getId();
 	    };
 	
-	private static final List<Build> BUILDS = Arrays.asList(
-	    new Build() {
-	        @Override public String getOrganism() { return "HomoSapiens";}
-	        @Override public String getId() { return "GRCh37";}
-	        @Override public boolean match(SAMSequenceDictionary dict) {
-	                return HtsjdkUtils.hasContig(dict,"1",249250621) &&
-	                        HtsjdkUtils.hasContig(dict,"2",243199373) &&
-	                        HtsjdkUtils.hasContig(dict,"3",198022430);
-	               }
-	        },
-	    new Build() {
-	        @Override public String getOrganism() { return "HomoSapiens";}
-	        @Override public String getId() { return "GRCh38";}
-	        @Override public boolean match(SAMSequenceDictionary dict) {
-	                return HtsjdkUtils.hasContig(dict,"1",248956422) &&
-	                        HtsjdkUtils.hasContig(dict,"2",242193529) &&
-	                        HtsjdkUtils.hasContig(dict,"3",198295559);
-	               }
-	        }
-	
-	    );
+	private static class BuildImpl implements Build  {
+		String id=".";
+		String version=".";
+		String organism=".";
+		final List<Predicate<SAMSequenceDictionary>> predicates = new ArrayList<>();
+		@Override  public boolean match(final SAMSequenceDictionary dict) {
+	    	return predicates.stream().allMatch(P->P.test(dict));
+	    	}
+	    @Override public String getOrganism() {return organism;}
+	    @Override public String getVersion() {return version;}
+	    @Override public String getId() {return id;}
+	    };
+		
+	    
+	private static List<Build> BUILDS = null;
 	
     public static interface HtsSource {
         String getPath();
@@ -119,12 +151,12 @@ public class HtsjdkUtils {
         public InputStream openInputStream() throws IOException;
 
         public VCFIterator openVcfIterator() throws IOException ;
+
         SamInputResource asSamInputResource();
+        
         public default BufferedReader openBufferedReader() throws IOException {
         	return new BufferedReader(new InputStreamReader(mayBeGzippedInputStream(openInputStream())));
         	}
-        
-        
         
     	public default SAMFileHeader extractSamFileHeader() throws IOException {
     		if(!this.isBam()) {
@@ -205,7 +237,7 @@ public class HtsjdkUtils {
     	    }
     	
     	
-    	public default Collection<String> extractSamples(String rgAttribute) throws IOException  {
+    	public default Collection<String> extractSamples(final String rgAttribute) throws IOException  {
     		if(this.isVcf()) {
     			return extractVcfHeader().getGenotypeSamples();
     			}
@@ -222,7 +254,7 @@ public class HtsjdkUtils {
     		throw new IOException("cannot extract samples from "+getPath());
     		}
     	
-    	public default List<String> extractContigs() throws IOException  {
+    	public default List<String> extractMappedContigs() throws IOException  {
     		if(this.hasSuffix(".gz") ) {
     			try(TabixReader tbr = new TabixReader(this.getPath())) {
     				return new ArrayList<>(tbr.getChromosomes());
@@ -241,10 +273,10 @@ public class HtsjdkUtils {
     			try(SamReader sr= this.openSamReader()) {
     				if(!sr.hasIndex()) throw new IOException("BAM/CRAM file "+getPath()+" is not indexed");
     				final SAMSequenceDictionary dict = sr.getFileHeader().getSequenceDictionary();
-    				List<String> L = new ArrayList<>();
-    				BAMIndex bai = sr.indexing().getIndex();
+    				final List<String> L = new ArrayList<>();
+    				final BAMIndex bai = sr.indexing().getIndex();
     				for( int i=0;i< dict.getReferenceLength();i++) {
-    					BAMIndexMetaData meta= bai.getMetaData(i);
+    					final BAMIndexMetaData meta= bai.getMetaData(i);
     					if(meta==null ||meta.getAlignedRecordCount()==0) continue;
     					L.add(dict.getSequence(i).getSequenceName());
     					}
@@ -323,9 +355,81 @@ public class HtsjdkUtils {
 
     	}
 
+    private static Build parseBuild(XMLEventReader xr) throws XMLStreamException {
+    	final BuildImpl b = new BuildImpl();
+    	while(xr.hasNext()) {
+			XMLEvent evt = xr.nextEvent();
+			if(evt.isStartElement() ) {
+				StartElement e = evt.asStartElement();
+				String name = e.getName().getLocalPart();
+				if(name.equals("version")) {
+					b.version = xr.getElementText().trim();
+					}
+				else if(name.equals("id")) {
+					b.id = xr.getElementText().trim();
+					}
+				else if(name.equals("organism")) {
+					b.organism = xr.getElementText().trim();
+					}
+				else if(name.equals("md5")) {
+					final String md5 =  xr.getElementText().trim();
+					b.predicates.add(DICT->DICT.md5().equals(md5));
+					}
+				else if(name.equals("contig")) {
+					Attribute a =e.getAttributeByName(new QName("name"));
+					if(a==null) throw new XMLStreamException("@name missing ",e.getLocation());
+					final String chrom = a.getValue();
+					a =e.getAttributeByName(new QName("length"));
+					if(a==null) throw new XMLStreamException("@length missing ",e.getLocation());
+					final int len = Integer.parseInt(a.getValue());
+					b.predicates.add(DICT->hasContig(DICT, chrom, len));
+					}
+				else
+					{
+					throw new XMLStreamException("undefined tag <"+name+">",e.getLocation());
+					}
+				}
+			else if(evt.isEndElement()) {
+				final EndElement e = evt.asEndElement();
+				if(e.getName().getLocalPart().equals("build")) {
+					if(b.predicates.isEmpty()) throw new XMLStreamException("no predicate for build",e.getLocation());
+					return b;
+					}
+				}
+			}
+    	throw new IllegalStateException("error in XML");
+    	}
+    
+    private static synchronized List<Build> getBuilds() {
+    	if(BUILDS==null) {
+    		synchronized (HtsjdkUtils.class) {
+    			if(BUILDS==null) {
+    				BUILDS= new ArrayList<>();
+    				try(InputStream in = HtsjdkUtils.class.getResourceAsStream("/META-INF/builds.xml")) {
+    					
+    					if(in!=null) {
+    						XMLInputFactory xif = XMLInputFactory.newFactory();
+    						XMLEventReader xr = xif.createXMLEventReader(in);
+    						while(xr.hasNext()) {
+    							XMLEvent evt = xr.nextEvent();
+    							if(evt.isStartElement() && evt.asStartElement().getName().getLocalPart().equals("build")) {
+    								BUILDS.add(parseBuild(xr));
+    								}
+    							}
+    						}
+    					}
+    				catch(IOException|XMLStreamException err) {
+    					err.printStackTrace();
+	    				}
+	    			}
+				}
+	    	}
+    	return BUILDS;
+    	}
+    
 
    static Build findBuild(final SAMSequenceDictionary dict) {
-        return BUILDS.stream().filter(B->B.match(dict)).findFirst().orElse(null);
+        return getBuilds().stream().filter(B->B.match(dict)).findFirst().orElse(null);
         }
 
 
@@ -433,8 +537,7 @@ public class HtsjdkUtils {
 			return hts;
     		}
     	}
-	
-	
+
 	private static InputStream mayBeGzippedInputStream(InputStream in) throws IOException {
 	    // wrap the input stream into a BufferedInputStream to reset/read a BCFHeader or a GZIP
 	    // buffer must be large enough to contain the BCF header and/or GZIP signature
@@ -447,7 +550,7 @@ public class HtsjdkUtils {
 	    	}
 	    return bufferedinput;
 		}
-		
+
 	private static boolean hasContig(SAMSequenceDictionary dict,String ctg,int expLen) {
 	    SAMSequenceRecord ssr = dict.getSequence(ctg);
 	    if(ssr==null) {
