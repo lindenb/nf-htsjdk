@@ -31,7 +31,7 @@ import htsjdk.variant.utils.SAMSequenceDictionaryExtractor;
 import htsjdk.variant.vcf.VCFFileReader;
 import htsjdk.variant.vcf.VCFHeader;
 import htsjdk.variant.vcf.VCFReader;
-
+import htsjdk.samtools.util.IOUtil;
 
 /** TODO
 
@@ -68,10 +68,93 @@ import htsjdk.variant.vcf.VCFReader;
 */
 
 public class HtsjdkUtils {
+    static interface HtsSource {
+        String getPath():
+        String getFilename();
+        boolean isRemote();
+        default boolean isLocal() { return !isRemote();}
+        default boolean hasSuffix(final String suff) {
+            return getFilename().endsWith(suff);
+            }
+        default boolean hasSuffix(Collection<String> suffixes) {
+            return suffixes.stream().anyMatch(S->hasSuffix(S));;
+            }
+        default boolean isFasta() {
+            return hasSuffix(FileExtensions.FASTA_LIST);
+            }
+        default boolean isVcf() {
+            return hasSuffix(FileExtensions.VCF_LIST);
+            }
+        default boolean isBam() {
+            return hasSuffix(FileExtensions.BAM) || hasSuffix(FileExtensions.CRAM);
+            }
+        HtsSource resolveSibling(String fn);
+        Collection<String> getSamples();
+        Collection<String> getContigs();
+        }
+    static abstract class AbstractHtsSource<T> implements HtsSource {
+        protected final T source;
+        AbstractHtsSource(final T  source) {
+            this.source = source;
+            }
+        @Overide String getPath() {return this.source.toString();}}
+        @Override int hashCode() { return this.source.hashCode();}
+        @Override public String toString() { return this.getPath();}
+        }
 
-	static boolean pathHasSuffix(Path path,final String suffix) {
-		return path.getFileName().toString().endsWith(suffix);
-	}
+    static class HtsPath extends AbstractHtsSource<Path> {
+        HtsPath(Path source) {super(source);}
+        HtsPath(File source) {super(source.toPath());}
+        @Overide String getFilename() {
+            return this.source.getFilename().toString();
+            }
+        @Override HtsSource resolveSibling(String fn) {
+            return new HtsPath(source.toPath().resolve(fn));
+            }
+        @Override final boolean isRemote() {  return false;}
+        @Override Path toPath() { return super.source;}
+        }
+
+    static class HtsUrl extends AbstractHtsSource<URL> {
+        HtsUrl(URL source) {super(source);}
+        @Overide String getFilename() {
+            String str= this.source.getPath();
+            int i=str.lastIndexOf('/');
+            if(i>=0) str=str.substring(i+1);
+            return str;
+            }
+        @Override HtsSource resolveSibling(String fn) {
+            return new HtsUrl(source.toURI().resolve(fn).toURL());
+            }
+        @Override final boolean isRemote() {  return true;}
+        @Override Path toPath() { throw new IllegalStateException("cannot get Path for URL");}
+        }
+
+
+
+    static Optional<HtsSource> toHtsFile(final Object path) {
+	    if(path==null) {
+	        return Optional.empty();
+	        }
+	    else if(path instanceof URL) {
+	        return Optional.of(new HtsUrl(URL.class.cast(path));
+	        }
+	    else if(path instanceof String) {
+	        String str = (String)path;
+	        if(IOUtils.isUrl(str)) {
+	            return Optional.of(new HtsUrl(new URL(path));
+	            }
+	        return Optional.empty();
+	        }
+	    else if(path instanceof File) {
+	        return Optional.of(new HtsPath(File.class.cast(path));
+	        }
+	    else if(path instanceof Path) {
+	        return Optional.of(new HtsPath(Path.class.cast(path));
+	        }
+	   return Optional.empty();
+       }
+
 
 	static List<String> extractSamples(final Path path) throws IOException  {
 		if(FileExtensions.VCF_LIST.stream().anyMatch(EXT->pathHasSuffix(path,EXT))) {
@@ -92,23 +175,21 @@ public class HtsjdkUtils {
 		throw new IOException("cannot extract samples from "+path);
 		}
 
-	static List<String> extractContigs(final Path path) throws IOException  {
-		if(pathHasSuffix(path,".gz") ) {
-			final Path tbi = path.resolveSibling(path.getFileName().toString() + FileExtensions.TABIX_INDEX);
-			if(Files.exists(tbi)) {
-				try(TabixReader tbr = new TabixReader(path.toString())) {
-					return new ArrayList<>(tbr.getChromosomes());
-					}
-				}
+	static List<String> extractContigs(final HtsFile htsFile) throws IOException  {
+		if(htsFile.hasSuffix(".gz") ) {
+			try(TabixReader tbr = new TabixReader(htsFile.getPath())) {
+				return new ArrayList<>(tbr.getChromosomes());
+			    }
 			}
-		final Path tribble_index  = Tribble.indexPath(path);
-		if(Files.exists(tribble_index)) {
-			try(InputStream in = Files.newInputStream(tribble_index)) {
-				final Index idx = IndexFactory.loadIndex(path.toString(),in);
-				return idx.getSequenceNames();
-				}
-			}
-		if(pathHasSuffix(path, FileExtensions.BAM) || pathHasSuffix(path, FileExtensions.CRAM)) {
+	    if(htsFile.isLocal()) {
+		    final Path tribble_index  = Tribble.indexPath(htsFile.toPath());
+		    if(Files.exists(tribble_index)) {
+    			try(InputStream in = Files.newInputStream(tribble_index)) {
+	    			final Index idx = IndexFactory.loadIndex(path.toString(),in);
+		    		return idx.getSequenceNames();
+			    	}
+			 }
+		if(htsFile.isBam()) {
 			SamReaderFactory srf = SamReaderFactory.makeDefault();
 			try(SamReader sr=srf.open(path)) {
 				if(!sr.hasIndex()) throw new IOException("BAM/CRAM file "+path+" is not indexed");
@@ -126,32 +207,29 @@ public class HtsjdkUtils {
 		throw new IOException("cannot extract chromosomes from "+path);
 		}
 
-	static SAMSequenceDictionary extractDictionary(final Path path) throws IOException  {
+	static SAMSequenceDictionary extractDictionary(final HtsFile htsFile) throws IOException  {
 		final SAMSequenceDictionary dict;
-		if(FileExtensions.VCF_LIST.stream().anyMatch(EXT->pathHasSuffix(path,EXT))) {
+		if(htsFile.isVcf()) {
 			final VCFHeader header = extractVcfHeader(path);
 			if(header==null) throw new IOException("Cannot extract header from VCF file "+path);
 			dict=header.getSequenceDictionary();
 			if(dict==null)  throw new IOException("there is no dictionary (lines starting with '##contig=') in header of VCF file "+path);
 			}
 		// fai not implemented in fasta
-		else if(pathHasSuffix(path,FileExtensions.FASTA_INDEX)) {
+		else if(htsFile.hasSuffix(FileExtensions.FASTA_INDEX)) {
 			return dictionaryFromFai(path);
 			}
-		else if(FileExtensions.FASTA.stream().anyMatch(EXT->pathHasSuffix(path.getFileName(),EXT))) {
+		else if(htsFile.isFasta()) {
 			final Path fai = path.resolveSibling(path.getFileName().toString() + FileExtensions.FASTA_INDEX);
 			final Path dictPath = ReferenceSequenceFileFactory.getDefaultDictionaryForReferenceSequence(path);
 			if(Files.exists(fai) && !Files.exists(dictPath)) return dictionaryFromFai(fai);
 			dict = SAMSequenceDictionaryExtractor.extractDictionary(path);
 			}
-		else
-			{
-			dict =	SAMSequenceDictionaryExtractor.extractDictionary(path);
+		else if(htsFile.isLocal()) {
+			dict =	SAMSequenceDictionaryExtractor.extractDictionary(htsFile.toPath());
 			}
-		
-		
-		if(dict==null) throw new SAMException("Cannot extract dictionary from "+path);
-		if(dict.isEmpty()) throw new SAMException("Cannot empty dictionary in "+path);
+	    if(dict==null) throw new SAMException("Cannot extract dictionary from "+htsFile);
+		if(dict.isEmpty()) throw new SAMException("Cannot empty dictionary in "+htsFile);
 		return dict;
 		}
 	

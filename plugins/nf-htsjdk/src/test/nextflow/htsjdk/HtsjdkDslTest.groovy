@@ -113,7 +113,7 @@ class HtsjdkDslTest extends Dsl2Spec{
             include {faidx} from 'plugin/nf-htsjdk'
             channel
                 .fromPath('../../data/rotavirus_rf.fa')
-                .faidx(hello:"world")
+                .fastaDict(attributes:"")
 		.filter{it.contig.equals("RF11")}
 		.map{it.length}
             '''

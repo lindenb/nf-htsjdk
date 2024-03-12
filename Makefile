@@ -1,6 +1,11 @@
 
 config ?= compileClasspath
 
+
+all:  check jar assemble
+
+jar: ./plugins/nf-htsjdk/build/libs/nf-htsjdk-0.1.0.jar
+
 ./plugins/nf-htsjdk/build/libs/nf-htsjdk-0.1.0.jar : ./plugins/nf-htsjdk/src/main/nextflow/htsjdk/HtsjdkExtension.groovy
 	./gradlew jar
 
@@ -11,10 +16,10 @@ mm =
 endif 
 
 clean:
-	rm -rf .nextflow*
-	rm -rf work
-	rm -rf build
-	rm -rf plugins/*/build
+	rm -rvf .nextflow*
+	rm -rvf work
+	rm -rvf build
+	rm -rvf plugins/*/build
 	./gradlew clean
 
 compile:

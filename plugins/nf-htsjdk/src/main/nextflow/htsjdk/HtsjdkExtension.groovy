@@ -106,17 +106,47 @@ class HtsjdkExtension extends PluginExtensionPoint {
     }
 
 
+    private Object findPathWithExtension(target, suffixes, Integer index) {
+ 	 tuple = (target instanceof List?target:[target])
+                if(element_idx != null && element_idx>=0) {
+                        return tuple[element_idx]
+                        }
+                else
+                        {
+                        int i = 0;
+                        while(i< args.size()) {
+                                def arg = args[i]
+                                if((arg instanceof Path) || (arg instanceof File)) {
+					}
+                                }
+			}
+	  }
+
+
     @Operator
-    DataflowWriteChannel faidx(DataflowReadChannel source, Map params = null) {
-        if(params==null) params=[:]
+    DataflowWriteChannel fastaDict(DataflowReadChannel source, Map params = null) {
+	Integer element_idx = null;
+        if(params==null) params=[:]	
 	//validate params
 	for(Object k: params.keySet()) {
-		throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
+		//throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
 		}
 
 
 	final target = CH.createBy(source)
         final next = {
+		tuple = (it instanceof List?it:[it])
+		if(element_idx != null && element_idx>=0) {
+			fasta = tuple[element_idx]
+			}
+		else
+			{
+			int i = 0;
+			while(i< args.size()) {
+				def arg = args[i]
+				if((arg instanceof Path) || (arg instanceof 
+				}		
+
 		final def htsfile = (java.nio.file.Path)it;
 		final def dict  = SAMSequenceDictionaryExtractor.extractDictionary(htsfile)
 		if(dict==null) {
