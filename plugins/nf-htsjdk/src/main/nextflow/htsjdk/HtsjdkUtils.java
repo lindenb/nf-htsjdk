@@ -343,7 +343,7 @@ public class HtsjdkUtils {
     			List<HtsSource> L = hash.values().
     					stream().
     					map(F->HtsjdkUtils.toHtsSource(F).orElse(null)).
-    					filter(F->F!=null && F.hasSuffix(extensions)).
+    					filter(F->F!=null && (extensions==null || F.hasSuffix(extensions))).
     					collect(Collectors.toList());
     			if(L.isEmpty()){
     				throw new IllegalArgumentException("Cannot find a valid source in "+o+" with suffixes : "+String.join(",", extensions));
@@ -382,7 +382,7 @@ public class HtsjdkUtils {
 					filter(F->F!=null && (extensions==null || F.hasSuffix(extensions))).
 					collect(Collectors.toList());
     			if(L.isEmpty()){
-    				throw new IllegalArgumentException("Cannot find a valid source in "+o+" with suffixes : "+String.join(",", extensions));
+    				throw new IllegalArgumentException("Cannot find a valid source in "+o);
     				}
     			// return first
     			return L.get(0);
@@ -392,7 +392,7 @@ public class HtsjdkUtils {
     		{
     		HtsSource hts = toHtsSource(o).orElse(null);
     		if(hts==null) throw new IllegalArgumentException("Cannot convert "+o+" to a HTS file");
-    		if(!hts.hasSuffix(extensions)) throw new IllegalArgumentException("got hts file"+o+" but with wrong suffixes : "+String.join(",", extensions));
+    		if(extensions!=null && !hts.hasSuffix(extensions)) throw new IllegalArgumentException("got hts file"+o+" but with wrong suffixes : "+String.join(",", extensions));
 			return hts;
     		}
     	}
