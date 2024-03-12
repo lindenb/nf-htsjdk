@@ -12,6 +12,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +54,34 @@ public class HtsjdkUtils {
 	
 	static final String KEY_ELEMENT="element";
 	
+	public static interface Build {
+	    public boolean match(SAMSequenceDictionary dict);
+	    public String getOrganism();
+	    public String getId();
+	    };
+	
+	private static final List<Build> BUILDS = Arrays.asList(
+	    new Build() {
+	        @Override public String getOrganism() { return "HomoSapiens";}
+	        @Override public String getId() { return "GRCh37";}
+	        @Override public boolean match(SAMSequenceDictionary dict) {
+	                return HtsjdkUtils.hasContig(dict,"1",249250621) &&
+	                        HtsjdkUtils.hasContig(dict,"2",243199373) &&
+	                        HtsjdkUtils.hasContig(dict,"3",198022430);
+	               }
+	        },
+	    new Build() {
+	        @Override public String getOrganism() { return "HomoSapiens";}
+	        @Override public String getId() { return "GRCh38";}
+	        @Override public boolean match(SAMSequenceDictionary dict) {
+	                return HtsjdkUtils.hasContig(dict,"1",248956422) &&
+	                        HtsjdkUtils.hasContig(dict,"2",242193529) &&
+	                        HtsjdkUtils.hasContig(dict,"3",198295559);
+	               }
+	        }
+	
+	    );
+	
     public static interface HtsSource {
         String getPath();
         String getFilename();
@@ -73,7 +102,7 @@ public class HtsjdkUtils {
             return hasSuffix(FileExtensions.FASTA);
             }
         default boolean isVcf() {
-            return hasSuffix(FileExtensions.VCF_LIST);
+            return hasSuffix(FileExtensions.VCF_LIST) || hasSuffix(".vcf.bgz") /* gnomad */;
             }
         default boolean isBam() {
             return hasSuffix(FileExtensions.BAM) || hasSuffix(FileExtensions.CRAM);
@@ -170,6 +199,10 @@ public class HtsjdkUtils {
     		if(dict.isEmpty()) throw new SAMException("Cannot empty dictionary in "+getPath());
     		return dict;
     		}
+
+    	public default Collection<String> extractSamples() throws IOException  {
+    	    return extractSamples(SAMReadGroupRecord.READ_GROUP_SAMPLE_TAG);
+    	    }
     	
     	
     	public default Collection<String> extractSamples(String rgAttribute) throws IOException  {
@@ -291,6 +324,10 @@ public class HtsjdkUtils {
     	}
 
 
+   static Build findBuild(final SAMSequenceDictionary dict) {
+        return BUILDS.stream().filter(B->B.match(dict)).findFirst().orElse(null);
+        }
+
 
     static Optional<HtsSource> toHtsSource(final Object path) {
 	    if(path==null) {
@@ -410,4 +447,15 @@ public class HtsjdkUtils {
 	    	}
 	    return bufferedinput;
 		}
+		
+	private static boolean hasContig(SAMSequenceDictionary dict,String ctg,int expLen) {
+	    SAMSequenceRecord ssr = dict.getSequence(ctg);
+	    if(ssr==null) {
+	        ctg=(ctg.startsWith("chr")?ctg.substring(3):"chr"+ctg);
+	        ssr = dict.getSequence(ctg);
+	        }
+	    if(ssr==null) return false;
+	    return ssr.getSequenceLength()==expLen;
+	    }
+
 }

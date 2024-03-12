@@ -62,25 +62,55 @@ class HtsjdkExtension extends PluginExtensionPoint {
     }
 
 	
-	private Object bind2(object,keyValues) {
+	private Object bind2(object, List keyValues) {
 		if(object instanceof List) {
 			def list = []
 			for(int i=0;i< keyValues.size();i+=2) {
 				list.add(keyValues.get(i+1));
 				}
-			return object.plus(list);
+			return List.class.cast(object).plus(list);
 			}
 		else if(object instanceof Map) {
 			def hash = [:]
 			for(int i=0;i< keyValues.size();i+=2) {
 				hash.put(keyValues.get(i), keyValues.get(i+1));
 				}
-			return object.plus(hash)
+			return Map.class.cast(object).plus(hash)
 			}
 		else {
-			return bind2([object]);
+			return bind2([object],keyValues);
 			}
 		}
+
+
+
+    @Operator
+    DataflowWriteChannel build(DataflowReadChannel source, Map params = null) {
+        if(params==null) params=[:]	
+		//validate params
+		for(Object k: params.keySet()) {
+			if(HtsjdkUtils.KEY_ELEMENT.equals(k)) continue;
+			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
+			}
+
+
+	final target = CH.createBy(source)
+        final next = {
+			def htsfile = HtsjdkUtils.findHtsSource(it, params.get(HtsjdkUtils.KEY_ELEMENT),null);
+			def dict  = htsfile.extractDictionary();
+			def build = HtsjdkUtils.findBuild(dict)
+			target.bind(bind2(it,[
+					"chrom_count",dict.size(),
+					"dict_md5",dict.md5(),
+					"organism",(build==null?null:build.getOrganism()),
+					"build",(build==null?null:build.getId())
+					]))	
+			}
+        final done = { target.bind(Channel.STOP) }
+        DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
+        return target
+    	}
+
 	
 
     @Operator
@@ -88,15 +118,15 @@ class HtsjdkExtension extends PluginExtensionPoint {
         if(params==null) params=[:]	
 		//validate params
 		for(Object k: params.keySet()) {
-			if(HtsJdkUtils.KEY_ELEMENT.equals(k)) continue;
+			if(HtsjdkUtils.KEY_ELEMENT.equals(k)) continue;
 			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
 			}
 
 
 		final target = CH.createBy(source)
         final next = {
-			final def htsfile = HtsJdkUtils.findHtsSource(it, params.get(HtsJdkUtils.KEY_ELEMENT),null);
-			final def dict  = htsfile.extractDictionary();
+			def htsfile = HtsjdkUtils.findHtsSource(it, params.get(HtsjdkUtils.KEY_ELEMENT),null);
+			def dict  = htsfile.extractDictionary();
 			dict.getSequences().each{
 				V->target.bind(bind2(it,[
 					"tid",V.getSequenceIndex(),
@@ -113,18 +143,19 @@ class HtsjdkExtension extends PluginExtensionPoint {
 		
 	@Operator
 	DataflowWriteChannel samples(DataflowReadChannel source, Map params = null) {
+		def att = null;
 		if(params==null) params=[:]
 		//validate params
 		for(Object k: params.keySet()) {
-			if(HtsJdkUtils.KEY_ELEMENT.equals(k)) continue;
+			if(HtsjdkUtils.KEY_ELEMENT.equals(k)) continue;
 			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
 			}
 
 
 		final target = CH.createBy(source)
 		final next = {
-			final def htsfile = HtsJdkUtils.findHtsSource(it, params.get(HtsJdkUtils.KEY_ELEMENT),null);
-			final def samples  = htsfile.extractSamples();
+			def htsfile = HtsjdkUtils.findHtsSource(it, params.get(HtsjdkUtils.KEY_ELEMENT),null);
+			def samples  = htsfile.extractSamples();
 			samples.each{
 				V->target.bind(bind2(it,[
 					"sample",V

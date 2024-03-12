@@ -4,9 +4,12 @@ config ?= compileClasspath
 
 all:  check jar assemble
 
+launch: 
+	./launch.sh run  -plugins  nf-htsjdk@0.1.0 data/test01.nf 
+
 jar: ./plugins/nf-htsjdk/build/libs/nf-htsjdk-0.1.0.jar
 
-./plugins/nf-htsjdk/build/libs/nf-htsjdk-0.1.0.jar : ./plugins/nf-htsjdk/src/main/nextflow/htsjdk/HtsjdkExtension.groovy
+./plugins/nf-htsjdk/build/libs/nf-htsjdk-0.1.0.jar : ./plugins/nf-htsjdk/src/main/nextflow/htsjdk/HtsjdkExtension.groovy ./plugins/nf-htsjdk/src/main/nextflow/htsjdk/HtsjdkUtils.java
 	./gradlew jar
 
 ifdef module 
