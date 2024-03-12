@@ -113,9 +113,9 @@ class HtsjdkDslTest extends Dsl2Spec{
             include {faidx} from 'plugin/nf-htsjdk'
             channel
                 .fromPath('../../data/rotavirus_rf.fa')
-                .fastaDict(attributes:"")
-		.filter{it.contig.equals("RF11")}
-		.map{it.length}
+                .faidx()
+		.filter{it[1].equals("RF11")}
+		.map{it[2]}
             '''
         and:
         def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()
