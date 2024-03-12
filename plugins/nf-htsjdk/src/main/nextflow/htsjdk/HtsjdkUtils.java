@@ -59,6 +59,7 @@ import htsjdk.samtools.BAMIndexMetaData;
 import htsjdk.samtools.SAMException;
 import htsjdk.samtools.SAMFileHeader;
 import htsjdk.samtools.SAMReadGroupRecord;
+import htsjdk.samtools.SAMRecord;
 import htsjdk.samtools.SAMSequenceDictionary;
 import htsjdk.samtools.SAMSequenceRecord;
 import htsjdk.samtools.SAMTextHeaderCodec;
@@ -68,6 +69,7 @@ import htsjdk.samtools.SamReaderFactory;
 import htsjdk.samtools.ValidationStringency;
 import htsjdk.samtools.util.BufferedLineReader;
 import htsjdk.samtools.util.FileExtensions;
+import htsjdk.samtools.util.CloseableIterator;
 import htsjdk.tribble.Tribble;
 import htsjdk.tribble.index.Index;
 import htsjdk.tribble.index.IndexFactory;
@@ -275,10 +277,19 @@ public class HtsjdkUtils {
     				final SAMSequenceDictionary dict = sr.getFileHeader().getSequenceDictionary();
     				final List<String> L = new ArrayList<>();
     				final BAMIndex bai = sr.indexing().getIndex();
-    				for( int i=0;i< dict.getReferenceLength();i++) {
-    					final BAMIndexMetaData meta= bai.getMetaData(i);
-    					if(meta==null ||meta.getAlignedRecordCount()==0) continue;
-    					L.add(dict.getSequence(i).getSequenceName());
+    				for( int i=0;i< dict.size();i++) {
+    				    if(hasSuffix(".cram")) {
+    				        try(CloseableIterator<SAMRecord> iter= sr.queryAlignmentStart(dict.getSequence(i).getSequenceName(),1)) {
+    				            if(iter.hasNext())  L.add(dict.getSequence(i).getSequenceName());
+    				            }
+    				        }
+    				    else {
+    					    final BAMIndexMetaData meta= bai.getMetaData(i);
+        					if(meta==null ||meta.getAlignedRecordCount()==0) {
+        					        continue;
+    	    				        }
+    		    			L.add(dict.getSequence(i).getSequenceName());
+    		    			}
     					}
     				return L;
     				}

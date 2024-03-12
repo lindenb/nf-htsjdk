@@ -16,5 +16,10 @@
 		<contig name="3" length="198295559"/>
 	</build>
 
+	<build>
+		<id>samtools</id>
+		<md5>df8200dd2a49e25bc98df5f2c45ac36a</md5>
+	</build>
+
 </builds>
 	
