@@ -124,5 +124,6 @@ BUILD: [rotavirus, /home/lindenb/src/nf-htsjdk/data/rotavirus_rf.vcf.gz]
 BUILD: [rotavirus, /home/lindenb/src/nf-htsjdk/data/rotavirus_rf.fa.fai]
 ```
 
+## Author
 
-
+Pierre Lindenbaum PhD
