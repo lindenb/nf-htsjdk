@@ -26,6 +26,7 @@ package nextflow.htsjdk;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -35,7 +36,9 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -73,10 +76,17 @@ import htsjdk.samtools.util.CloseableIterator;
 import htsjdk.tribble.Tribble;
 import htsjdk.tribble.index.Index;
 import htsjdk.tribble.index.IndexFactory;
+import htsjdk.tribble.readers.LineIterator;
+import htsjdk.tribble.readers.LineIteratorImpl;
+import htsjdk.tribble.readers.PositionalBufferedStream;
+import htsjdk.tribble.readers.SynchronousLineReader;
 import htsjdk.tribble.readers.TabixReader;
 import htsjdk.tribble.util.ParsingUtils;
 import htsjdk.variant.bcf2.BCF2Codec;
+import htsjdk.variant.bcf2.BCF2Type;
+import htsjdk.variant.bcf2.BCFVersion;
 import htsjdk.variant.utils.SAMSequenceDictionaryExtractor;
+import htsjdk.variant.vcf.VCFCodec;
 import htsjdk.variant.vcf.VCFConstants;
 import htsjdk.variant.vcf.VCFHeader;
 import htsjdk.variant.vcf.VCFIterator;
@@ -116,6 +126,7 @@ public class HtsjdkUtils {
 	    
 	private static List<Build> BUILDS = null;
 	
+	/** warpper around HTS files (bam, cram, vcf, fasta, etc...) */
     public static interface HtsSource {
         String getPath();
         String getFilename();
@@ -140,6 +151,12 @@ public class HtsjdkUtils {
             }
         default boolean isBam() {
             return hasSuffix(FileExtensions.BAM) || hasSuffix(FileExtensions.CRAM);
+            }
+        default boolean isFai() {
+            return hasSuffix(FileExtensions.FASTA_INDEX);
+            }
+        default boolean isDict() {
+            return hasSuffix(FileExtensions.DICT);
             }
         Path asPath();
         HtsSource resolveSibling(String fn);
@@ -176,10 +193,12 @@ public class HtsjdkUtils {
     			throw new SAMException("not a valid extension for VCF "+getPath());
     			}
     		
-    		try(VCFIterator r=this.openVcfIterator()) {
-    			 return r.getHeader();
-    		}
-    	}
+    	
+    		try(InputStream in=this.openInputStream()) {
+    			 return decodeVCFHeader(in);
+    			}
+	    		
+	    	}
 
     	
     	
@@ -199,14 +218,14 @@ public class HtsjdkUtils {
     	
     	public default SAMSequenceDictionary extractDictionary() throws IOException  {
     		SAMSequenceDictionary dict = null;
-    		if(this.isLocal() && !this.hasSuffix(FileExtensions.FASTA_INDEX)) {
-    			dict =	SAMSequenceDictionaryExtractor.extractDictionary(this.asPath());
-    			}
-    		else if(this.isVcf()) {
+    		if(this.isVcf()) {
     			final VCFHeader header = extractVcfHeader();
     			if(header==null) throw new IOException("Cannot extract header from VCF file "+getPath());
     			dict=header.getSequenceDictionary();
     			if(dict==null)  throw new IOException("there is no dictionary (lines starting with '##"+VCFConstants.CONTIG_HEADER_KEY+"') in header of VCF file "+getPath());
+    			}
+    		else if(this.isLocal() && !this.hasSuffix(FileExtensions.FASTA_INDEX)) {
+    			dict =	SAMSequenceDictionaryExtractor.extractDictionary(this.asPath());
     			}
     		// fai not implemented in fasta
     		else if(this.hasSuffix(FileExtensions.FASTA_INDEX)) {
@@ -443,7 +462,7 @@ public class HtsjdkUtils {
         return getBuilds().stream().filter(B->B.match(dict)).findFirst().orElse(null);
         }
 
-
+    /** bild an HTS source from an object */
     static Optional<HtsSource> toHtsSource(final Object path) {
 	    if(path==null) {
 	        return Optional.empty();
@@ -459,7 +478,7 @@ public class HtsjdkUtils {
 					throw new IllegalArgumentException("cannot convert "+path+" to URL", e);
 				}
 	            }
-	        return Optional.empty();
+	        return Optional.of(new HtsPath(Paths.get(String.class.cast(path))));
 	        }
 	    else if(path instanceof File) {
 	        return Optional.of(new HtsPath(File.class.cast(path)));
@@ -470,7 +489,10 @@ public class HtsjdkUtils {
 	   return Optional.empty();
        }
 
-    static HtsSource findHtsSource(final Object o, Object key, final Collection<String> extensions)  {
+    /** find Path looking like a htsfile in object 'o'
+     *  @param key key for Map or index for List
+     */
+    static HtsSource findHtsSource(final Object o, Object key, final Predicate<HtsSource> acceptHtsSource)  {
     	if(o==null) {
     		throw new IllegalArgumentException("Object cannot be null");
     		}
@@ -480,25 +502,25 @@ public class HtsjdkUtils {
     			if(!hash.containsKey(key)) {
     				throw new IllegalArgumentException("Cannot find object key="+key+" in map : "+o);
     				}
-    			Object value = hash.get(key);
-    			HtsSource source = toHtsSource(value).orElse(null);
+    			final  Object value = hash.get(key);
+    			final HtsSource source = toHtsSource(value).orElse(null);
     			if(source==null) {
     				throw new IllegalArgumentException("Cannot convert "+value+" to HTS file");
     				}
-    			if(extensions!=null && !source.hasSuffix(extensions)) {
-    				throw new IllegalArgumentException("HTS file "+source+" was found but has no valid suffixes : "+String.join(",", extensions));
+    			if(!acceptHtsSource.test(source)) {
+    				throw new IllegalArgumentException("HTS file "+source+" was found but has no valid suffixes");
     				}
     			return source;
     			}
     		else
     			{
-    			List<HtsSource> L = hash.values().
+    			final List<HtsSource> L = hash.values().
     					stream().
     					map(F->HtsjdkUtils.toHtsSource(F).orElse(null)).
-    					filter(F->F!=null && (extensions==null || F.hasSuffix(extensions))).
+    					filter(F->F!=null && acceptHtsSource.test(F)).
     					collect(Collectors.toList());
     			if(L.isEmpty()){
-    				throw new IllegalArgumentException("Cannot find a valid source in "+o+" with suffixes : "+String.join(",", extensions));
+    				throw new IllegalArgumentException("Cannot find a valid source in "+o+".");
     				}
     			// return first
     			return L.get(0);
@@ -523,15 +545,15 @@ public class HtsjdkUtils {
     			if(source==null) {
     				throw new IllegalArgumentException("Cannot convert "+value+" to HTS file");
     				}
-    			if(extensions!=null && !source.hasSuffix(extensions)) {
-    				throw new IllegalArgumentException("HTS file "+source+" was found but has no valid suffixes : "+String.join(",", extensions));
+    			if(!acceptHtsSource.test(source)) {
+    				throw new IllegalArgumentException("HTS file "+source+" was found but has no valid suffixes");
     				}
     			return source;
     			}
     		else
     			{
-    			List<HtsSource> L = list.stream().map(F->HtsjdkUtils.toHtsSource(F).orElse(null)).
-					filter(F->F!=null && (extensions==null || F.hasSuffix(extensions))).
+    			final List<HtsSource> L = list.stream().map(F->HtsjdkUtils.toHtsSource(F).orElse(null)).
+					filter(F->F!=null && acceptHtsSource.test(F)).
 					collect(Collectors.toList());
     			if(L.isEmpty()){
     				throw new IllegalArgumentException("Cannot find a valid source in "+o);
@@ -542,9 +564,9 @@ public class HtsjdkUtils {
     		}
     	else
     		{
-    		HtsSource hts = toHtsSource(o).orElse(null);
+    		final HtsSource hts = toHtsSource(o).orElse(null);
     		if(hts==null) throw new IllegalArgumentException("Cannot convert "+o+" to a HTS file");
-    		if(extensions!=null && !hts.hasSuffix(extensions)) throw new IllegalArgumentException("got hts file"+o+" but with wrong suffixes : "+String.join(",", extensions));
+    		if(!acceptHtsSource.test(hts)) throw new IllegalArgumentException("got hts file"+o+" but with wrong suffixes.");
 			return hts;
     		}
     	}
@@ -572,5 +594,66 @@ public class HtsjdkUtils {
 	    if(ssr==null) return false;
 	    return ssr.getSequenceLength()==expLen;
 	    }
+
+	/** extract VCFHeader from stream. Once decoded, the stream is invalid (uncompressed, bytes skipped, etc..) */
+	private static VCFHeader decodeVCFHeader(InputStream in0) throws IOException {
+		BufferedInputStream in = new BufferedInputStream(mayBeGzippedInputStream(in0),BCFVersion.MAGIC_HEADER_START.length);
+        in.mark(2);
+		final VCFCodec headerParser = new VCFCodec();
+
+		// read BCF version
+        final byte[] magicBytes = new byte[BCFVersion.MAGIC_HEADER_START.length];
+        in.read(magicBytes);
+        
+        if ( !Arrays.equals(magicBytes, BCFVersion.MAGIC_HEADER_START) ) {
+        	in.reset();
+        	/* looks like a regular VCF */
+ 	       try( final PositionalBufferedStream bps = new PositionalBufferedStream(in)) {
+		        final LineIterator lineIterator = new LineIteratorImpl(new SynchronousLineReader(bps));
+		        return (VCFHeader)headerParser.readActualHeader(lineIterator);
+		       	}
+        	}
+        else
+	        {
+	        // we're a BCF file
+	        final int majorByte = in.read();
+	        final int minorByte = in.read();
+	        new BCFVersion( majorByte, minorByte );
+	    	
+	        final int headerSizeInBytes = BCF2Type.INT32.read(in);
+	
+	        if ( headerSizeInBytes <= 0 ) throw new IOException("BCF2 header has invalid length: " + headerSizeInBytes + " must be >= 0");
+	        final byte[] headerBytes = new byte[headerSizeInBytes];
+	        readFully(in, headerBytes);
+	        
+	        try( final PositionalBufferedStream bps = new PositionalBufferedStream(new ByteArrayInputStream(headerBytes))) {
+		        final LineIterator lineIterator = new LineIteratorImpl(new SynchronousLineReader(bps));
+		
+		        return (VCFHeader)headerParser.readActualHeader(lineIterator);
+		       	}
+			}
+		}
+		
+		/** Reads len bytes in a loop */
+	    private static void readFully(final InputStream in, final byte buf[], int off, int len ) throws IOException {
+	        int toRead = len;
+	        while ( toRead > 0 ) {
+	          int ret = in.read( buf, off, toRead );
+	          if ( ret < 0 ) {
+	            throw new IOException( "Premeture EOF from inputStream");
+	          }
+	          toRead -= ret;
+	          off += ret;
+	        }
+	      }
+      /** Reads len bytes in a loop.
+       * @param in The InputStream to read from
+       * @param buf The buffer to fill
+       * @throws IOException if it could not read requested number of bytes 
+       * for any reason (including EOF)
+       */
+	    private static void readFully(final InputStream in, final byte buf[]) throws IOException {
+	      	readFully(in, buf,0,buf.length);
+	      }
 
 }

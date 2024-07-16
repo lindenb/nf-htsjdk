@@ -83,23 +83,28 @@ class HtsjdkExtension extends PluginExtensionPoint {
     }
 
 	
-	private Object bind2(object, List keyValues) {
-		if(object instanceof List) {
-			def list = []
-			for(int i=0;i< keyValues.size();i+=2) {
-				list.add(keyValues.get(i+1));
+	private Object bind2(Object userData,Object row) {
+		if(row instanceof List) {
+			List L=[];
+			
+			if(userData instanceof List) {
+				L.addAll(List.class.cast(userData));
 				}
-			return List.class.cast(object).plus(list);
+			else
+				{
+				L.add(userData);
+				}
+			L.addAll(List.class.cast(row));
+			return L;
 			}
-		else if(object instanceof Map) {
-			def hash = [:]
-			for(int i=0;i< keyValues.size();i+=2) {
-				hash.put(keyValues.get(i), keyValues.get(i+1));
-				}
-			return Map.class.cast(object).plus(hash)
+		else if(row instanceof Map && userData instanceof Map) {
+			Map hash=[:];
+			hash.putAll(Map.class.cast(row));
+			hash.putAll(Map.class.cast(userData));
+			return hash;
 			}
 		else {
-			return bind2([object],keyValues);
+			return bind2(userData,[row]);
 			}
 		}
 
@@ -120,45 +125,45 @@ class HtsjdkExtension extends PluginExtensionPoint {
 			def htsfile = HtsjdkUtils.findHtsSource(it, params.get(HtsjdkUtils.KEY_ELEMENT),null);
 			def dict  = htsfile.extractDictionary();
 			def build = HtsjdkUtils.findBuild(dict)
-			target.bind(bind2(it,[
+			target.bind(bind2([
 					"chrom_count",dict.size(),
 					"dict_md5",dict.md5(),
 					"dict_length",dict.getReferenceLength(),
 					"organism",(build==null?null:build.getOrganism()),
 					"build",(build==null?null:build.getId())
-					]))	
+					],it))	
 			}
         final done = { target.bind(Channel.STOP) }
         DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
         return target
     	}
 
-		@Operator
-		DataflowWriteChannel chromosomes(DataflowReadChannel source, Map params = null) {
-			if(params==null) params=[:]
-			//validate params
-			for(Object k: params.keySet()) {
-				throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
-				}
-			
-			final target = CH.createBy(source)
-			final next = {
-				def htsfile = HtsjdkUtils.findHtsSource(it,null,null);
-				final SAMSequenceDictionary dict  = htsfile.extractDictionary();
-				
-				dict.getSequences().each{
-					V->target.bind(
-						[
-						V.getSequenceName(),
-						it
-						]
-						);
-					}
-				}
-			final done = { target.bind(Channel.STOP) }
-			DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
-			return target
+	@Operator
+	DataflowWriteChannel chromosomes(DataflowReadChannel source, Map params = null) {
+		if(params==null) params=[:]
+		//validate params
+		for(Object k: params.keySet()) {
+			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
 			}
+		
+		final target = CH.createBy(source)
+		final next = {
+			def htsfile = HtsjdkUtils.findHtsSource(it,null,null);
+			final SAMSequenceDictionary dict  = htsfile.extractDictionary();
+			
+			dict.getSequences().each{
+				V->target.bind(
+					[
+					V.getSequenceName(),
+					it
+					]
+					);
+				}
+			}
+		final done = { target.bind(Channel.STOP) }
+		DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
+		return target
+		}
 
     @Operator
     DataflowWriteChannel dictionary(DataflowReadChannel source, Map params = null) {
@@ -167,45 +172,61 @@ class HtsjdkExtension extends PluginExtensionPoint {
 		for(Object k: params.keySet()) {
 			if(k.equals("header")) continue;
 			if(k.equals("elem")) continue;
+			if(k.equals("withLength")) continue;
+			if(k.equals("withTid")) continue;
+			if(k.equals("chromosomeOnly")) continue;
 			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
 			}
-		final Object withHeaderObject = params.getOrDefault("header", true);
-		if(!(withHeaderObject instanceof Boolean)) throw new IllegalArgumentException("\"header\" is not a valid key.");
+		final Object withHeaderObject = params.getOrDefault("header", false);
+		if(!(withHeaderObject instanceof Boolean)) throw new IllegalArgumentException("\"header\" is not a boolean.");
 		final boolean withHeader = Boolean.class.cast(withHeaderObject);
+		
+		// index in row
 		final Object elem = params.getOrDefault("elem", null);
 		
+		//include length
+		final Object withLengthObject = params.getOrDefault("withLength", false);
+		if(!(withLengthObject instanceof Boolean)) throw new IllegalArgumentException("\"withLength\" is not a boolean.");
+		final boolean withLength = Boolean.class.cast(withLengthObject);
+		
 
+		//include tid
+		final Object withTidObject = params.getOrDefault("withTid", false);
+		if(!(withTidObject instanceof Boolean)) throw new IllegalArgumentException("\"withTid\" is not a valid boolean.");
+		final boolean withTid = Boolean.class.cast(withTidObject);
+
+				
 		final target = CH.createBy(source)
         final next = {
-			def htsfile = HtsjdkUtils.findHtsSource(it, params.get("elem"),null);
+			final HtsjdkUtils.HtsSource htsfile = HtsjdkUtils.findHtsSource(it, elem /* element */ ,{HTS->HTS.isBam() || HTS.isVcf() || HTS.isDict()|| HTS.isFai()| HTS.isFasta()});
 			final SAMSequenceDictionary dict  = htsfile.extractDictionary();
-			if(withHeader) {
-				/*
-				dict.getSequences().each{
-					V->target.bind(bind2([
-						"tid",V.getSequenceIndex(),
-						"chrom",V.getSequenceName(),
-						"chromLength", V.getSequenceLength(),
-						"altNames", new java.util.ArrayList(V.getAlternativeSequenceNames())
-						],it));
+			
+			
+			dict.getSequences().each{
+				V->{
+					final Map hash=[:];
+					hash.put("chrom",V.getSequenceName());
+					if(withTid) {
+						hash.put("tid",V.getSequenceIndex());
 						}
-				*/
-				}
-			else
-				{
-				dict.getSequences().each{
-					V->target.bind(
-						[
-						V.getSequenceIndex(),
-						V.getSequenceName(),
-						V.getSequenceLength(),
-						new java.util.ArrayList(V.getAlternativeSequenceNames()),
-						it
-						]
-						);
+					if(withLength) {
+						hash.put("length",V.getSequenceLength());
+						}
+					if(!withHeader) {
+						List L = [];
+						for(String k: hash.keySet()) {
+							L.add(hash.get(k));
+							}
+						target.bind(bind2( L, it ));
+						}
+					else
+						{
+						target.bind(bind2( hash, it ));
+						}
 					}
 				}
-			}
+				
+			};
         final done = { target.bind(Channel.STOP) }
         DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
         return target
@@ -213,65 +234,53 @@ class HtsjdkExtension extends PluginExtensionPoint {
 		
 	@Operator
 	DataflowWriteChannel samples(DataflowReadChannel source, Map params = null) {
-		if(params==null) params=[:]
-		def enableEmpty = (params.getOrDefault(HtsjdkUtils.KEY_ENABLE_EMPTY,false) as boolean);
+        if(params==null) params=[:]	
 		//validate params
 		for(Object k: params.keySet()) {
-			if(HtsjdkUtils.KEY_ELEMENT.equals(k)) continue;
-			if(HtsjdkUtils.KEY_ENABLE_EMPTY.equals(k)) continue;
+			if(k.equals("header")) continue;
+			if(k.equals("elem")) continue;
+			if(k.equals("defaultName")) continue;
 			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
 			}
-
-
+		final Object withHeaderObject = params.getOrDefault("header", false);
+		if(!(withHeaderObject instanceof Boolean)) throw new IllegalArgumentException("\"header\" is not a boolean.");
+		final boolean withHeader = Boolean.class.cast(withHeaderObject);
+		
+		final Object defaultName = params.getOrDefault("defaultName", null);
+		
+		// index in row
+		final Object elem = params.getOrDefault("elem", null);
+				
 		final target = CH.createBy(source)
-		final next = {
-			def htsfile = HtsjdkUtils.findHtsSource(it, params.get(HtsjdkUtils.KEY_ELEMENT),null);
-			def samples  = htsfile.extractSamples();
-			if(enableEmpty  && samples.isEmpty()) {
-				target.bind(bind2(it,[
-					"sample",HtsjdkUtils.NO_SAMPLE
-					]))
+        final next = {
+			final HtsjdkUtils.HtsSource htsfile = HtsjdkUtils.findHtsSource(it, elem /* element */ ,{HTS->HTS.isBam() || HTS.isVcf() });
+			def samples = htsfile.extractSamples();
+			if(samples.isEmpty() && defaultName!=null) {
+				samples = Collections.singletonList(defaultName);
 				}
+			
+			
 			samples.each{
-				V->target.bind(bind2(it,[
-					"sample",V
-					]))
+				S->{
+					final Map hash=[:];
+					hash.put("sample",S);
+					if(!withHeader) {
+						List L = [];
+						for(String k: hash.keySet()) {
+							L.add(hash.get(k));
+							}
+						target.bind(bind2( L, it ));
+						}
+					else
+						{
+						target.bind(bind2( hash, it ));
+						}
+					}
 				}
-			}
-		final done = { target.bind(Channel.STOP) }
-		DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
-		return target
-		}
-	
-	@Operator
-	DataflowWriteChannel mappedContigs(DataflowReadChannel source, Map params = null) {
-		if(params==null) params=[:]
-		def enableEmpty = (params.getOrDefault(HtsjdkUtils.KEY_ENABLE_EMPTY,false) as boolean);
-		//validate params
-		for(Object k: params.keySet()) {
-			if(HtsjdkUtils.KEY_ELEMENT.equals(k)) continue;
-			if(HtsjdkUtils.KEY_ENABLE_EMPTY.equals(k)) continue;
-			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
-			}
-
-
-		final target = CH.createBy(source)
-		final next = {
-			def htsfile = HtsjdkUtils.findHtsSource(it, params.get(HtsjdkUtils.KEY_ELEMENT),null);
-			def samples  = htsfile.extractMappedContigs();
-			if(enableEmpty  && samples.isEmpty()) {
-				target.bind(bind2(it,[
-					"contig",HtsjdkUtils.NO_CONTIG
-					]))
-				}
-			samples.each{
-				V->target.bind(bind2(it,[
-					"contig",V
-					]))
-				}
-			}
-		final done = { target.bind(Channel.STOP) }
-		DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
-		return target
+				
+			};
+        final done = { target.bind(Channel.STOP) }
+        DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
+        return target
 		}	
 }
