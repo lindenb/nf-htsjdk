@@ -86,4 +86,4 @@ publish-index:
 run:
 	$(MAKE)
 	$(MAKE) buildPlugins
-	./launch.sh data/main.nf
+	./launch.sh data/main.nf | tee output.txt
