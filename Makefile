@@ -31,7 +31,7 @@ compile:
 
 
 check:
-	./gradlew check
+	./gradlew check --warning-mode all
 
 
 #
@@ -54,9 +54,9 @@ refresh:
 #
 test:
 ifndef class
-	./gradlew ${mm}test
+	./gradlew ${mm}test --warning-mode all
 else
-	./gradlew ${mm}test --tests ${class}
+	./gradlew ${mm}test --tests ${class} --warning-mode all
 endif
 
 assemble:

@@ -28,7 +28,7 @@ class HtsjdkConfig {
 
     HtsjdkConfig(Map map){
         def config = map ?: Collections.emptyMap()
-        prefix = config.prefix ?: 'Mr.'
+        prefix = config.prefix ?: '[htsjdk]'
     }
 
     String getPrefix() { prefix }

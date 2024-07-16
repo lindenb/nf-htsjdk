@@ -45,9 +45,6 @@ import htsjdk.samtools.util.FileExtensions;
 import nextflow.htsjdk.HtsjdkUtils;
 
 
-
-
-
 /**
  *
  * @author : Pierre Lindenbaum univ-nantes.fr
@@ -136,29 +133,77 @@ class HtsjdkExtension extends PluginExtensionPoint {
         return target
     	}
 
-	
+		@Operator
+		DataflowWriteChannel chromosomes(DataflowReadChannel source, Map params = null) {
+			if(params==null) params=[:]
+			//validate params
+			for(Object k: params.keySet()) {
+				throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
+				}
+			
+			final target = CH.createBy(source)
+			final next = {
+				def htsfile = HtsjdkUtils.findHtsSource(it,null,null);
+				final SAMSequenceDictionary dict  = htsfile.extractDictionary();
+				
+				dict.getSequences().each{
+					V->target.bind(
+						[
+						V.getSequenceName(),
+						it
+						]
+						);
+					}
+				}
+			final done = { target.bind(Channel.STOP) }
+			DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
+			return target
+			}
 
     @Operator
     DataflowWriteChannel dictionary(DataflowReadChannel source, Map params = null) {
         if(params==null) params=[:]	
 		//validate params
 		for(Object k: params.keySet()) {
-			if(HtsjdkUtils.KEY_ELEMENT.equals(k)) continue;
+			if(k.equals("header")) continue;
+			if(k.equals("elem")) continue;
 			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
 			}
-
+		final Object withHeaderObject = params.getOrDefault("header", true);
+		if(!(withHeaderObject instanceof Boolean)) throw new IllegalArgumentException("\"header\" is not a valid key.");
+		final boolean withHeader = Boolean.class.cast(withHeaderObject);
+		final Object elem = params.getOrDefault("elem", null);
+		
 
 		final target = CH.createBy(source)
         final next = {
-			def htsfile = HtsjdkUtils.findHtsSource(it, params.get(HtsjdkUtils.KEY_ELEMENT),null);
-			def dict  = htsfile.extractDictionary();
-			dict.getSequences().each{
-				V->target.bind(bind2(it,[
-					"tid",V.getSequenceIndex(),
-					"chrom",V.getSequenceName(),
-					"chromLength", V.getSequenceLength(),
-					"altNames", new java.util.ArrayList(V.getAlternativeSequenceNames())
-					]))
+			def htsfile = HtsjdkUtils.findHtsSource(it, params.get("elem"),null);
+			final SAMSequenceDictionary dict  = htsfile.extractDictionary();
+			if(withHeader) {
+				/*
+				dict.getSequences().each{
+					V->target.bind(bind2([
+						"tid",V.getSequenceIndex(),
+						"chrom",V.getSequenceName(),
+						"chromLength", V.getSequenceLength(),
+						"altNames", new java.util.ArrayList(V.getAlternativeSequenceNames())
+						],it));
+						}
+				*/
+				}
+			else
+				{
+				dict.getSequences().each{
+					V->target.bind(
+						[
+						V.getSequenceIndex(),
+						V.getSequenceName(),
+						V.getSequenceLength(),
+						new java.util.ArrayList(V.getAlternativeSequenceNames()),
+						it
+						]
+						);
+					}
 				}
 			}
         final done = { target.bind(Channel.STOP) }

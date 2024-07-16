@@ -63,65 +63,21 @@ class HtsjdkDslTest extends Dsl2Spec{
         pluginsMode ? System.setProperty('pf4j.mode',pluginsMode) : System.clearProperty('pf4j.mode')
     }
 
-    def 'should perform a hi and create a channel' () {
+
+    def 'test with chromosomes' () {
         when:
         def SCRIPT = '''
-            include {reverse} from 'plugin/nf-htsjdk'
-            channel.reverse('hi!') 
-            '''
-        and:
-        def result = new MockScriptRunner([htsjdk:[prefix:'>>']]).setScript(SCRIPT).execute()
-        then:
-        result.val == 'hi!'.reverse()
-        result.val == Channel.STOP
-    }
-
-    def 'should store a goodbye' () {
-        when:
-        def SCRIPT = '''
-            include {goodbye} from 'plugin/nf-htsjdk'
-            channel
-                .of('folks')
-                .goodbye() 
-            '''
-        and:
-        def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()
-        then:
-        result.val == 'Goodbye folks'
-        result.val == Channel.STOP
-        
-    }
-
-    def 'can use an imported function' () {
-        when:
-        def SCRIPT = '''
-            include {randomString} from 'plugin/nf-htsjdk'
-            channel
-                .of( randomString(20) )                
-            '''
-        and:
-        def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()
-        then:
-        result.val.size() == 20
-        result.val == Channel.STOP
-    }
-
-
-    def 'test with faidx' () {
-        when:
-        def SCRIPT = '''
-            include {faidx} from 'plugin/nf-htsjdk'
+            include {chromosomes} from 'plugin/nf-htsjdk'
             channel
                 .fromPath('../../data/rotavirus_rf.fa')
-                .faidx()
-		.filter{it[1].equals("RF11")}
-		.map{it[2]}
-            '''
+                .chromosomes()
+				.take(1)
+        '''
         and:
-        def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()
+        	def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()
         then:
-        (result.val as int )== 666
-        result.val == Channel.STOP
+		    result.val[0] == "RF01"
+	        result.val == Channel.STOP
         
     }
 

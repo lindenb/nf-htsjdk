@@ -87,7 +87,7 @@ import htsjdk.samtools.util.StringUtil;
 
 
 public class HtsjdkUtils {
-	
+    private static final String BUILD_RESOURCE = "/META-INF/builds.xml";
 	static final String KEY_ELEMENT="element";
 	static final String KEY_ENABLE_EMPTY="enableEmpty";
 	static final String NO_SAMPLE=".";
@@ -416,7 +416,7 @@ public class HtsjdkUtils {
     		synchronized (HtsjdkUtils.class) {
     			if(BUILDS==null) {
     				BUILDS= new ArrayList<>();
-    				try(InputStream in = HtsjdkUtils.class.getResourceAsStream("/META-INF/builds.xml")) {
+    				try(InputStream in = HtsjdkUtils.class.getResourceAsStream(BUILD_RESOURCE)) {
     					
     					if(in!=null) {
     						XMLInputFactory xif = XMLInputFactory.newFactory();
@@ -429,7 +429,7 @@ public class HtsjdkUtils {
     							}
     						}
     					}
-    				catch(IOException|XMLStreamException err) {
+    				catch(final IOException|XMLStreamException err) {
     					err.printStackTrace();
 	    				}
 	    			}
@@ -562,7 +562,8 @@ public class HtsjdkUtils {
 	    return bufferedinput;
 		}
 
-	private static boolean hasContig(SAMSequenceDictionary dict,String ctg,int expLen) {
+	/** predicate finding chromosome in SAMSequenceDictionary */
+	private static boolean hasContig(final SAMSequenceDictionary dict, String ctg,final int expLen) {
 	    SAMSequenceRecord ssr = dict.getSequence(ctg);
 	    if(ssr==null) {
 	        ctg=(ctg.startsWith("chr")?ctg.substring(3):"chr"+ctg);
