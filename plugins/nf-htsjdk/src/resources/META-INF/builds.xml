@@ -15,6 +15,12 @@
 		<contig name="2" length="242193529"/>
 		<contig name="3" length="198295559"/>
 	</build>
+	<build>
+		<id>rotavirus</id>
+		<organism>Rotavirus</organism>
+		<contig name="RF01" length="3302"/>
+		<contig name="RF02" length="2687"/>
+	</build>
 
 	<build>
 		<id>samtools</id>

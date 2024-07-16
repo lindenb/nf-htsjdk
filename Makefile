@@ -81,3 +81,9 @@ upload-plugins:
 
 publish-index:
 	./gradlew plugins:publishIndex
+
+
+run:
+	$(MAKE)
+	$(MAKE) buildPlugins
+	./launch.sh data/main.nf
