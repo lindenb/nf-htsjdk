@@ -138,32 +138,6 @@ class HtsjdkExtension extends PluginExtensionPoint {
         return target
     	}
 
-	@Operator
-	DataflowWriteChannel chromosomes(DataflowReadChannel source, Map params = null) {
-		if(params==null) params=[:]
-		//validate params
-		for(Object k: params.keySet()) {
-			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
-			}
-		
-		final target = CH.createBy(source)
-		final next = {
-			def htsfile = HtsjdkUtils.findHtsSource(it,null,null);
-			final SAMSequenceDictionary dict  = htsfile.extractDictionary();
-			
-			dict.getSequences().each{
-				V->target.bind(
-					[
-					V.getSequenceName(),
-					it
-					]
-					);
-				}
-			}
-		final done = { target.bind(Channel.STOP) }
-		DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
-		return target
-		}
 
     @Operator
     DataflowWriteChannel dictionary(DataflowReadChannel source, Map params = null) {
@@ -198,7 +172,7 @@ class HtsjdkExtension extends PluginExtensionPoint {
 				
 		final target = CH.createBy(source)
         final next = {
-			final HtsjdkUtils.HtsSource htsfile = HtsjdkUtils.findHtsSource(it, elem /* element */ ,{HTS->HTS.isBam() || HTS.isVcf() || HTS.isDict()|| HTS.isFai()| HTS.isFasta()});
+			final HtsjdkUtils.HtsSource htsfile = HtsjdkUtils.findHtsSource(it, elem /* element */ ,{HTS->HTS.isBamCramSam() || HTS.isVcf() || HTS.isDict()|| HTS.isFai()| HTS.isFasta()});
 			final SAMSequenceDictionary dict  = htsfile.extractDictionary();
 			
 			
@@ -253,7 +227,7 @@ class HtsjdkExtension extends PluginExtensionPoint {
 				
 		final target = CH.createBy(source)
         final next = {
-			final HtsjdkUtils.HtsSource htsfile = HtsjdkUtils.findHtsSource(it, elem /* element */ ,{HTS->HTS.isBam() || HTS.isVcf() });
+			final HtsjdkUtils.HtsSource htsfile = HtsjdkUtils.findHtsSource(it, elem /* element */ ,{HTS->HTS.isBamCramSam() || HTS.isVcf() });
 			def samples = htsfile.extractSamples();
 			if(samples.isEmpty() && defaultName!=null) {
 				samples = Collections.singletonList(defaultName);

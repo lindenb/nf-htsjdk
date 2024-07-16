@@ -149,8 +149,17 @@ public class HtsjdkUtils {
         default boolean isVcf() {
             return hasSuffix(FileExtensions.VCF_LIST) || hasSuffix(".vcf.bgz") /* gnomad */;
             }
+        default boolean isBamCramSam() {
+            return isBam() || isCram() || isSam();
+            }
         default boolean isBam() {
-            return hasSuffix(FileExtensions.BAM) || hasSuffix(FileExtensions.CRAM);
+            return hasSuffix(FileExtensions.BAM);
+            }
+        default boolean isCram() {
+            return hasSuffix(FileExtensions.CRAM);
+            }
+        default boolean isSam() {
+            return hasSuffix(FileExtensions.SAM);
             }
         default boolean isFai() {
             return hasSuffix(FileExtensions.FASTA_INDEX);
@@ -178,7 +187,7 @@ public class HtsjdkUtils {
         	}
         
     	public default SAMFileHeader extractSamFileHeader() throws IOException {
-    		if(!this.isBam()) {
+    		if(!isBamCramSam()) {
     			throw new SAMException("not a valid extension for BAM "+getPath());
     			}
     		try(InputStream is = this.openInputStream()) {
@@ -245,7 +254,7 @@ public class HtsjdkUtils {
         			dict= fai.dictionaryFromFai();
     				}
     			}
-    		else if(this.isBam()) {
+    		else if(isBamCramSam()) {
     			dict = extractSamFileHeader().getSequenceDictionary();
     			}
     	    if(dict==null) throw new SAMException("Cannot extract dictionary from "+getPath());
@@ -262,7 +271,7 @@ public class HtsjdkUtils {
     		if(this.isVcf()) {
     			return extractVcfHeader().getGenotypeSamples();
     			}
-    		else if(this.isBam()) {
+    		else if(this.isBamCramSam()) {
     			final String rgAtt=StringUtil.isBlank(rgAttribute)?SAMReadGroupRecord.READ_GROUP_SAMPLE_TAG:rgAttribute;
 				return extractSamFileHeader().
 					getReadGroups().
@@ -290,7 +299,7 @@ public class HtsjdkUtils {
     			    	}
     		    	}
     			 }
-    		if(this.isBam()) {
+    		if(this.isBam() || this.isCram()) {
     			try(SamReader sr= this.openSamReader()) {
     				if(!sr.hasIndex()) throw new IOException("BAM/CRAM file "+getPath()+" is not indexed");
     				final SAMSequenceDictionary dict = sr.getFileHeader().getSequenceDictionary();

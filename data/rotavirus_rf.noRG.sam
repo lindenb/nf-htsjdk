@@ -1,0 +1,15 @@
+@HD	VN:1.3	SO:coordinate
+@SQ	SN:RF01	LN:3302
+@SQ	SN:RF02	LN:2687
+@SQ	SN:RF03	LN:2592
+@SQ	SN:RF04	LN:2362
+@SQ	SN:RF05	LN:1579
+@SQ	SN:RF06	LN:1356
+@SQ	SN:RF07	LN:1074
+@SQ	SN:RF08	LN:1059
+@SQ	SN:RF09	LN:1062
+@SQ	SN:RF10	LN:751
+@SQ	SN:RF11	LN:666
+@RG	ID:S1	SM:S1	LB:L1	CN:Nantes
+@PG	ID:samtools	PN:samtools	VN:1.19	CL:samtools view -O BAM -o data/S1.rota.bam -T /home/lindenbaum-p/src/jvarkit/src/test/resources/rotavirus_rf.fa /home/lindenbaum-p/src/jvarkit/src/test/resources/S1.bam RF03 RF04
+@PG	ID:samtools.1	PN:samtools	PP:samtools	VN:1.13	CL:samtools view -H S1.rota.bam
