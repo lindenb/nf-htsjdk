@@ -3,6 +3,7 @@
 	<build>
 		<id>GRCh37</id>
 		<organism>HomoSapiens</organism>
+		<ucsc>hg19</ucsc>
 		<contig name="1" length="249250621"/>
 		<contig name="2" length="243199373"/>
 		<contig name="3" length="198022430"/>
@@ -10,6 +11,7 @@
 
 	<build>
 		<id>GRCh38</id>
+		<ucsc>hg38</ucsc>
 		<organism>HomoSapiens</organism>
 		<contig name="1" length="248956422"/>
 		<contig name="2" length="242193529"/>

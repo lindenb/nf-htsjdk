@@ -49,6 +49,7 @@ htsfiles_ch= local_files_ch.mix(remote_files_ch)
 
 The `dictionary` function extracts the SAM Sequence dictionary from BAM/CRAM/SAM/VCF/BCF/FAI/DICT file returns a `htsjdk.samtools.SAMSequenceDictionary` [https://github.com/samtools/htsjdk/blob/master/src/main/java/htsjdk/samtools/SAMSequenceDictionary.java](https://github.com/samtools/htsjdk/blob/master/src/main/java/htsjdk/samtools/SAMSequenceDictionary.java)
 
+
 ```nextflow
 htsfiles_ch.                
     map{[dictionary(it),it]}.
@@ -127,16 +128,24 @@ The Build interface is:
 public interface Build {
     /** return the build identifier */
     public String getId();
+    /** return the organism's name or null */
+    public String getOrganism();
+    /** return the ucsc identifier (hg38,hg19...) or null */
+    public String getUcsc();
     }
 ```
+
+| parameter | type | description |
+|-----------|------|-------------|
+| resolveContig | boolean | when looking for a compatible dictionary, ignore the chr prefix, convert 'chrM' and 'MT', etc... |
 
 
 
 ```nextflow
 
 htsfiles_ch.
-	map{[build(it),it]}.
-	map{[it[0]==null?"NO_BUILD":it[0].getId(),it[1]]}.
+	map{[build(it,[resolveContig:true]),it]}.
+	map{[it[0]==null?"NO_BUILD":it[0].getId()+(it[0].getUcsc()==null?"":" ucsc:"+it[0].getUcsc()),it[1]]}.
 	view{"BUILD: ${it}"}
 
 ```
@@ -144,10 +153,10 @@ htsfiles_ch.
 output
 
 ```
-BUILD: [GRCh38, http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa]
-BUILD: [GRCh37, http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase1/data/HG00101/exome_alignment/HG00101.mapped.illumina.mosaik.GBR.exome.20110411.bam]
-BUILD: [GRCh38, https://storage.googleapis.com/gcp-public-data--gnomad/release/4.0/vcf/exomes/gnomad.exomes.v4.0.sites.chr1.vcf.bgz]
-BUILD: [GRCh38, https://www.encodeproject.org/files/ENCFF656TNN/@@download/ENCFF656TNN.bam]
+BUILD: [hs38me ucsc:hg38, http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa]
+BUILD: [hs37d5 ucsc:hg19, http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase1/data/HG00101/exome_alignment/HG00101.mapped.illumina.mosaik.GBR.exome.20110411.bam]
+BUILD: [hs38me ucsc:hg38, https://storage.googleapis.com/gcp-public-data--gnomad/release/4.0/vcf/exomes/gnomad.exomes.v4.0.sites.chr1.vcf.bgz]
+BUILD: [hs38me ucsc:hg38, https://www.encodeproject.org/files/ENCFF656TNN/@@download/ENCFF656TNN.bam]
 BUILD: [NO_BUILD, https://github.com/lindenb/jvarkit/raw/master/src/test/resources/toy.cram]
 BUILD: [rotavirus, /home/lindenb/src/nf-htsjdk/data/S1.rota.bam]
 BUILD: [rotavirus, /home/lindenb/src/nf-htsjdk/data/rotavirus_rf.noRG.sam]
@@ -157,6 +166,42 @@ BUILD: [rotavirus, /home/lindenb/src/nf-htsjdk/data/rotavirus_rf.vcf.gz]
 BUILD: [rotavirus, /home/lindenb/src/nf-htsjdk/data/rotavirus_rf.fa.fai]
 BUILD: [rotavirus, /home/lindenb/src/nf-htsjdk/data/rotavirus_rf.interval_list]
 BUILD: [rotavirus, /home/lindenb/src/nf-htsjdk/data/rotavirus_rf.interval_list.gz]
+```
+
+## Configuration file
+
+A configuration file for the nf-htsjdk plugin contains the followings parameters:
+
+| parameter | type | description |
+|-----------|------|-------------|
+| resolveContig | `boolean` | default behavior for the `build.resolveContig` function |
+| builds | `array[map]` | a list of builds that will be used for the `build` function. A build should have a name and a list of `chromosomes`. Each chromosome should have a `name` and a `length`. See below for an example  |
+
+Configuration example:
+
+```
+ htsjdk {
+	resolveContigName = true
+	builds =[ 
+		[
+		name : "hs37d5",
+		ucsc: "hg19",
+		organism: "HomoSapiens",
+		chromosomes : [ [name:"chr1",length:249250621],[name:"chr2",length:243199373],[name:"chr3",length:198022430] ]
+		],
+		[
+		name: "hs38me",
+		ucsc: "hg38",
+		organism: "HomoSapiens",
+		chromosomes : [  [name:"chr1",length:248956422],[name:"chr2",length:242193529],[name:"chr3",length:198295559] ]
+		],
+		[
+		name: "rotavirus",
+		organism: "Rotavirus",
+		chromosomes : [ [name:"RF01",length:3302],[name:"RF02",length:2687],[name:"RF03",length:2592] ]
+		]
+		]		
+	}
 ```
 
 ## Author

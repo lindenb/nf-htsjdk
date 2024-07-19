@@ -26,8 +26,8 @@ htsfiles_ch= local_files_ch.mix(remote_files_ch)
 
 
 htsfiles_ch.
-	map{[build(it),it]}.
-	map{[it[0]==null?"NO_BUILD":it[0].getId(),it[1]]}.
+	map{[build(it,[resolveContig:true]),it]}.
+	map{[it[0]==null?"NO_BUILD":it[0].getId()+(it[0].getUcsc()==null?"":" ucsc:"+it[0].getUcsc()),it[1]]}.
 	view{"BUILD: ${it}"}
 
 

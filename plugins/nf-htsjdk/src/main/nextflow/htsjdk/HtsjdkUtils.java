@@ -155,7 +155,10 @@ public class HtsjdkUtils {
 	
 	public static interface Build {
 	    public boolean match(boolean resolveChromosome,SAMSequenceDictionary dict);
+	    /*ù get organism or null */
 	    public String getOrganism();
+	    /*ù get ucsc name ('hg38', 'hg19'... or null ) */
+	    public String getUcsc();
 	    public default String getVersion() { return ".";}
 	    public String getId();
 	    /** alias for getId */
@@ -167,7 +170,8 @@ public class HtsjdkUtils {
 	private static class BuildImpl implements Build  {
 		String id=".";
 		String version=".";
-		String organism=".";
+		String organism=null;
+		String ucscName=null;
 		final List<ContigMatcher> predicates = new ArrayList<>();
 		@Override  
 		public boolean match(boolean resolveChromosome,final SAMSequenceDictionary dict) {
@@ -176,6 +180,7 @@ public class HtsjdkUtils {
 	    @Override public String getOrganism() {return organism;}
 	    @Override public String getVersion() {return version;}
 	    @Override public String getId() {return id;}
+	    @Override public String getUcsc() {return ucscName;}
 	    };
 		
 	    
@@ -478,6 +483,9 @@ public class HtsjdkUtils {
 				else if(name.equals("organism")) {
 					b.organism = xr.getElementText().trim();
 					}
+				else if(name.equals("ucsc")) {
+					b.ucscName = xr.getElementText().trim();
+					}
 				else if(name.equals("md5")) {
 					final String md5 =  xr.getElementText().trim();
 					b.predicates.add(new ContigMD5Matcher(md5));
@@ -559,6 +567,14 @@ public class HtsjdkUtils {
 		if(!(buildName instanceof String))  throw new IllegalArgumentException("config htsjdk : builds["+i+"].name is not a string "+buildName.getClass());
 		final BuildImpl buildImpl = new BuildImpl();
 		buildImpl.id = String.valueOf(buildName);
+
+		if(hash2.containsKey("ucsc")) {
+			buildImpl.ucscName = String.valueOf(hash2.get("ucsc"));
+			}
+		if(hash2.containsKey("organism")) {
+			buildImpl.organism = String.valueOf(hash2.get("organism"));
+			}
+
 		if(!hash2.containsKey("chromosomes"))  throw new IllegalArgumentException("config htsjdk : builds["+i+"].chromosomes is undefined");
 		final Object o3 = hash2.get("chromosomes");
 		if(!(o3 instanceof List)) throw new IllegalArgumentException("in htsjdk config. Expected builds["+i+"].chromosomes as List but got a "+o3.getClass());
@@ -589,6 +605,7 @@ public class HtsjdkUtils {
 				{
 				throw new IllegalArgumentException("config htsjdk : builds["+i+"].chromosomes["+j+"].length is undefined");
 				}
+			builds.add(buildImpl);
 			}
 		}
 	return builds;
