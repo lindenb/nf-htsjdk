@@ -40,6 +40,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -103,8 +104,54 @@ public class HtsjdkUtils {
 	static final String NO_SAMPLE=".";
 	static final String NO_CONTIG=".";
 	
+	/** search for compatible contig in a SAMSequenceDictionary */
+	private static interface ContigMatcher {
+		abstract public  boolean test(boolean resolveChromosome,final SAMSequenceDictionary dict);
+		}
+	
+	private static class ContigLengthMatcher implements ContigMatcher {
+		private final String contigName;
+		private final int contigLen;
+		ContigLengthMatcher(String contigName,int contigLen) {
+			this.contigName = contigName;
+			this.contigLen = contigLen;
+			}
+		@Override
+		public boolean test(boolean resolveChromosome,final SAMSequenceDictionary dict) {
+			return dict.getSequences().
+					stream().
+					anyMatch(SRR->contigLen==(SRR.getSequenceLength()) && contigsMatch(resolveChromosome,contigName,SRR.getContig()));
+			
+			}
+		private boolean contigsMatch(boolean resolveChromosome,String s1,String s2) {
+			if(!resolveChromosome) return s1.equals(s2);
+			return simpleChromName(s1).equals(simpleChromName(s2));
+			}
+		
+		private String simpleChromName(String s) {
+			s=s.toLowerCase();
+			if(s.startsWith("chr")) s=s.substring(3);
+			if(s.equals("m")) return "mt";
+			return s;
+			}
+		}
+	private static class ContigMD5Matcher implements ContigMatcher {
+		private final String md5;
+		ContigMD5Matcher(String md5) {
+			this.md5 = md5;
+			}
+		@Override
+		public boolean test(boolean resolveChromosome,final SAMSequenceDictionary dict) {
+			return dict.getSequences().
+					stream().
+					anyMatch(SRR->md5.equals(SRR.getMd5()));
+			}
+		}
+
+	
+	
 	public static interface Build {
-	    public boolean match(SAMSequenceDictionary dict);
+	    public boolean match(boolean resolveChromosome,SAMSequenceDictionary dict);
 	    public String getOrganism();
 	    public default String getVersion() { return ".";}
 	    public String getId();
@@ -114,9 +161,10 @@ public class HtsjdkUtils {
 		String id=".";
 		String version=".";
 		String organism=".";
-		final List<Predicate<SAMSequenceDictionary>> predicates = new ArrayList<>();
-		@Override  public boolean match(final SAMSequenceDictionary dict) {
-	    	return predicates.stream().allMatch(P->P.test(dict));
+		final List<ContigMatcher> predicates = new ArrayList<>();
+		@Override  
+		public boolean match(boolean resolveChromosome,final SAMSequenceDictionary dict) {
+	    	return predicates.stream().allMatch(P->P.test(resolveChromosome,dict));
 	    	}
 	    @Override public String getOrganism() {return organism;}
 	    @Override public String getVersion() {return version;}
@@ -412,7 +460,7 @@ public class HtsjdkUtils {
 					}
 				else if(name.equals("md5")) {
 					final String md5 =  xr.getElementText().trim();
-					b.predicates.add(DICT->DICT.md5().equals(md5));
+					b.predicates.add(new ContigMD5Matcher(md5));
 					}
 				else if(name.equals("contig")) {
 					Attribute a =e.getAttributeByName(new QName("name"));
@@ -421,7 +469,7 @@ public class HtsjdkUtils {
 					a =e.getAttributeByName(new QName("length"));
 					if(a==null) throw new XMLStreamException("@length missing ",e.getLocation());
 					final int len = Integer.parseInt(a.getValue());
-					b.predicates.add(DICT->hasContig(DICT, chrom, len));
+					b.predicates.add(new ContigLengthMatcher(chrom, len));
 					}
 				else
 					{
@@ -439,7 +487,7 @@ public class HtsjdkUtils {
     	throw new IllegalStateException("error in XML");
     	}
     
-    private static synchronized List<Build> getBuilds() {
+    private static synchronized List<Build> getDefaultBuilds() {
     	if(BUILDS==null) {
     		synchronized (HtsjdkUtils.class) {
     			if(BUILDS==null) {
@@ -467,10 +515,65 @@ public class HtsjdkUtils {
     	}
     
 
-   static Build findBuild(final SAMSequenceDictionary dict) {
-        return getBuilds().stream().filter(B->B.match(dict)).findFirst().orElse(null);
-        }
+   
 
+   static List<Build> decodeBuilds(final Object o1) {
+	if(o1==null) {
+		return getDefaultBuilds();
+		}
+	if(!(o1 instanceof List)) throw new IllegalArgumentException("in htsjdk config. Expected htsjdk.builds as List but got a "+o1.getClass());
+	List L1 = List.class.cast(o1);
+	if(L1.isEmpty()) {
+		return Collections.emptyList();
+		}
+	final List<Build> builds = new ArrayList<>(L1.size());
+	
+	for(int i=0;i< L1.size();i++) {
+		final Object o2 = L1.get(i);
+		if(o2==null)  throw new IllegalArgumentException("config htsjdk : builds["+i+"] is null");
+		if(!(o2 instanceof Map)) throw new IllegalArgumentException("config htsjdk : builds["+i+"] expected a Map but got "+o2.getClass());
+		final Map hash2 = Map.class.cast(o2);
+		if(!hash2.containsKey("name"))  throw new IllegalArgumentException("config htsjdk : builds["+i+"].name is undefined");
+		Object buildName = hash2.get("name");
+		if(!(buildName instanceof String))  throw new IllegalArgumentException("config htsjdk : builds["+i+"].name is not a string "+buildName.getClass());
+		final BuildImpl buildImpl = new BuildImpl();
+		buildImpl.id = String.valueOf(buildName);
+		if(!hash2.containsKey("chromosomes"))  throw new IllegalArgumentException("config htsjdk : builds["+i+"].chromosomes is undefined");
+		final Object o3 = hash2.get("chromosomes");
+		if(!(o3 instanceof List)) throw new IllegalArgumentException("in htsjdk config. Expected builds["+i+"].chromosomes as List but got a "+o3.getClass());
+		List L3 = List.class.cast(o3);
+		if(L3.isEmpty()) {
+			throw new IllegalArgumentException("in htsjdk config. Expected builds["+i+"].chromosomes is empty");
+			}
+		for(int j=0;j< L3.size();j++) {
+			final Object o4 = L3.get(j);
+			if(o4==null)  throw new IllegalArgumentException("config htsjdk : builds["+i+"].chromosomes["+j+"] is null");
+			if(!(o4 instanceof Map)) throw new IllegalArgumentException("config htsjdk : builds["+i+"].chromosomes["+j+"] expected a Map but got "+o2.getClass());
+			final Map hash4 = Map.class.cast(o4);
+			if(hash4.containsKey("md5"))  {
+				final String md5 =  String.class.cast(hash4.get("md5"));
+				buildImpl.predicates.add(new ContigMD5Matcher(md5));
+				continue;
+				}
+
+			
+			
+			if(!hash4.containsKey("name"))  throw new IllegalArgumentException("config htsjdk : builds["+i+"].chromosomes["+j+"].name is undefined");
+			final String contigName = String.class.cast(hash4.get("name"));
+			if(hash4.containsKey("length")) {
+				final int length = Integer.class.cast(hash4.get("length"));
+				buildImpl.predicates.add(new ContigLengthMatcher(contigName, length));
+				}
+			else
+				{
+				throw new IllegalArgumentException("config htsjdk : builds["+i+"].chromosomes["+j+"].length is undefined");
+				}
+			}
+		}
+	return builds;
+   	}
+   
+   
     /** bild an HTS source from an object */
     static Optional<HtsSource> toHtsSource(final Object path) {
 	    if(path==null) {
@@ -664,5 +767,5 @@ public class HtsjdkUtils {
 	    private static void readFully(final InputStream in, final byte buf[]) throws IOException {
 	      	readFully(in, buf,0,buf.length);
 	      }
-
+	   
 }

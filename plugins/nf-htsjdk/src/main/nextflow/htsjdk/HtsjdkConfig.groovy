@@ -24,12 +24,16 @@ import groovy.transform.PackageScope
 @PackageScope
 class HtsjdkConfig {
 
-    final private String prefix
+    final private List<HtsjdkUtils.Build> builds
 
     HtsjdkConfig(Map map){
         def config = map ?: Collections.emptyMap()
-        prefix = config.prefix ?: '[htsjdk]'
+        this.builds = config.containsKey("builds") 
+		? HtsjdkUtils.decodeBuilds(config.get("builds"))
+		: HtsjdkUtils.getDefaultBuilds();
     }
 
-    String getPrefix() { prefix }
+    List<HtsjdkUtils.Build> getBuilds() { 
+		return this.builds;
+		}
 }

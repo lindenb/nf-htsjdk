@@ -1,15 +1,16 @@
-
+SHELL=/bin/bash
+PLUGIN_VERSION=$(shell awk '($$1=="Plugin-Version:") {print $$2;}' ./plugins/nf-htsjdk/build/resources/main/META-INF/MANIFEST.MF)
 config ?= compileClasspath
 
 
 all:  check jar assemble
 
-launch: 
-	./launch.sh run  -plugins  nf-htsjdk@0.1.0 data/test01.nf 
+launch:
+	./launch.sh run  -plugins  nf-htsjdk@$(PLUGIN_VERSION) -c data/workflow.cfg data/test01.nf
 
-jar: ./plugins/nf-htsjdk/build/libs/nf-htsjdk-0.1.0.jar
+jar: ./plugins/nf-htsjdk/build/libs/nf-htsjdk-$(PLUGIN_VERSION).jar
 
-./plugins/nf-htsjdk/build/libs/nf-htsjdk-0.1.0.jar : ./plugins/nf-htsjdk/src/main/nextflow/htsjdk/HtsjdkExtension.groovy ./plugins/nf-htsjdk/src/main/nextflow/htsjdk/HtsjdkUtils.java
+./plugins/nf-htsjdk/build/libs/nf-htsjdk-$(PLUGIN_VERSION).jar : ./plugins/nf-htsjdk/src/main/nextflow/htsjdk/HtsjdkExtension.groovy ./plugins/nf-htsjdk/src/main/nextflow/htsjdk/HtsjdkUtils.java
 	./gradlew jar
 
 ifdef module 
@@ -86,4 +87,4 @@ publish-index:
 run:
 	$(MAKE)
 	$(MAKE) buildPlugins
-	./launch.sh data/main.nf | tee output.txt
+	./launch.sh run -c data/workflow.cfg data/main.nf | tee output.txt

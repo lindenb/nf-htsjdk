@@ -43,6 +43,7 @@ import htsjdk.samtools.SAMException
 import java.util.Arrays;
 import htsjdk.samtools.util.FileExtensions;
 import nextflow.htsjdk.HtsjdkUtils;
+import nextflow.htsjdk.HtsjdkUtils.Build
 
 
 /**
@@ -82,6 +83,10 @@ class HtsjdkExtension extends PluginExtensionPoint {
         this.config = new HtsjdkConfig(session.config.navigate('htsjdk') as Map)
     }
 
+	
+	private HtsjdkConfig getConfig() {
+		return this.config;
+		}
 	
 	private Object bind2(Object userData,Object row) {
 		if(row instanceof List) {
@@ -196,7 +201,7 @@ class HtsjdkExtension extends PluginExtensionPoint {
 		final next = {
 			final HtsjdkUtils.HtsSource htsfile = HtsjdkUtils.findHtsSource(it, elem /* element */ ,{HTS->HTS.isBamCramSam() || HTS.isVcf() || HTS.isDict()|| HTS.isFai()| HTS.isFasta()});
 			final SAMSequenceDictionary dict  = htsfile.extractDictionary();
-			final HtsjdkUtils.Build build = (dict==null?null:HtsjdkUtils.findBuild(dict));
+			final HtsjdkUtils.Build build = (dict==null?null:this.findBuild(true,dict));
 			
 		
 			final Map hash=[:];
@@ -272,5 +277,9 @@ class HtsjdkExtension extends PluginExtensionPoint {
         final done = { target.bind(Channel.STOP) }
         DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
         return target
-		}	
-}
+		}
+		
+	private Build findBuild(boolean resolveContig,final SAMSequenceDictionary dict) {
+		return getConfig().getBuilds().stream().filter(B->B.match(resolveContig,dict)).findFirst().orElse(null);
+		}
+	}

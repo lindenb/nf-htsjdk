@@ -8,3 +8,10 @@ build
 work
 out
 /bin/
+
+# test
+output.txt
+
+#eclipse
+.classpath
+.project
