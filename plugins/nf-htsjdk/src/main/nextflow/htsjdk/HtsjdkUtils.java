@@ -31,7 +31,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.Reader;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -76,7 +75,6 @@ import htsjdk.samtools.util.BufferedLineReader;
 import htsjdk.samtools.util.FileExtensions;
 import htsjdk.samtools.util.CloseableIterator;
 import htsjdk.tribble.Tribble;
-import htsjdk.tribble.IntervalList.IntervalListCodec;
 import htsjdk.tribble.index.Index;
 import htsjdk.tribble.index.IndexFactory;
 import htsjdk.tribble.readers.LineIterator;
@@ -160,6 +158,10 @@ public class HtsjdkUtils {
 	    public String getOrganism();
 	    public default String getVersion() { return ".";}
 	    public String getId();
+	    /** alias for getId */
+	    public default String getName() {
+	    	return this.getId();
+	    	}
 	    };
 	
 	private static class BuildImpl implements Build  {
@@ -620,89 +622,6 @@ public class HtsjdkUtils {
 	   return Optional.empty();
        }
 
-    /** find Path looking like a htsfile in object 'o'
-     *  @param key key for Map or index for List
-     */
-    static HtsSource findHtsSource(final Object o, Object key, final Predicate<HtsSource> acceptHtsSource)  {
-    	if(o==null) {
-    		throw new IllegalArgumentException("Object cannot be null");
-    		}
-    	else if(o instanceof Map) {
-    		final Map<?,?> hash = Map.class.cast(o);
-    		if(key!=null) {
-    			if(!hash.containsKey(key)) {
-    				throw new IllegalArgumentException("Cannot find object key="+key+" in map : "+o);
-    				}
-    			final  Object value = hash.get(key);
-    			final HtsSource source = toHtsSource(value).orElse(null);
-    			if(source==null) {
-    				throw new IllegalArgumentException("Cannot convert "+value+" to HTS file");
-    				}
-    			if(!acceptHtsSource.test(source)) {
-    				throw new IllegalArgumentException("HTS file "+source+" was found but has no valid suffixes");
-    				}
-    			return source;
-    			}
-    		else
-    			{
-    			final List<HtsSource> L = hash.values().
-    					stream().
-    					map(F->HtsjdkUtils.toHtsSource(F).orElse(null)).
-    					filter(F->F!=null && acceptHtsSource.test(F)).
-    					collect(Collectors.toList());
-    			if(L.isEmpty()){
-    				throw new IllegalArgumentException("Cannot find a valid source in "+o+".");
-    				}
-    			// return first
-    			return L.get(0);
-    			}
-    		}
-    	else if(o instanceof List) {
-    		final List<?> list = List.class.cast(o);
-    		int index=-1;
-    		if(key!=null) {
-    			if(key instanceof Integer) {
-    				index = Integer.class.cast(key).intValue();
-    				}
-    			else
-    				{
-    				throw new IllegalArgumentException("Index for list provided  "+key+" but it's a "+key.getClass()+" not an integer");
-    				}
-    			if(index< 0 || index >= list.size()) {
-    				throw new IndexOutOfBoundsException("Index provided idx="+index+" but list has size:"+list.size());
-    				}
-    			Object value = list.get(index);
-    			HtsSource source = toHtsSource(value).orElse(null);
-    			if(source==null) {
-    				throw new IllegalArgumentException("Cannot convert "+value+" to HTS file");
-    				}
-    			if(!acceptHtsSource.test(source)) {
-    				throw new IllegalArgumentException("HTS file "+source+" was found but has no valid suffixes");
-    				}
-    			return source;
-    			}
-    		else
-    			{
-    			final List<HtsSource> L = list.stream().map(F->HtsjdkUtils.toHtsSource(F).orElse(null)).
-					filter(F->F!=null && acceptHtsSource.test(F)).
-					collect(Collectors.toList());
-    			if(L.isEmpty()){
-    				throw new IllegalArgumentException("Cannot find a valid source in "+o);
-    				}
-    			// return first
-    			return L.get(0);
-    			}
-    		}
-    	else
-    		{
-    		final HtsSource hts = toHtsSource(o).orElse(null);
-    		if(hts==null) throw new IllegalArgumentException("Cannot convert "+o+" to a HTS file");
-    		if(!acceptHtsSource.test(hts)) throw new IllegalArgumentException("got hts file"+o+" but with wrong suffixes.");
-			return hts;
-    		}
-    	}
-
-    
 
     /**
      * convert Object 'source ' to 'HtsSource'

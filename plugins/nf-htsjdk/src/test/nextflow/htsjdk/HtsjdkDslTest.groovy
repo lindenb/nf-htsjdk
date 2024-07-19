@@ -252,4 +252,22 @@ class HtsjdkDslTest extends Dsl2Spec{
 			result.val == Channel.STOP
 		
 	}
+
+	def 'build with sam' () {
+		when:
+		def SCRIPT = '''
+            include {build} from 'plugin/nf-htsjdk'
+            channel
+                .fromPath('../../data/S1.rota.bam')
+                .map{[build(it),it]}
+                .filter{it[0]!=null}
+				.map{[it[0].getId(),it[1]]}
+        '''
+		and:
+			def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()
+		then:
+			result.val[0] == "rotavirus"
+			result.val == Channel.STOP
+		
+	}
 }

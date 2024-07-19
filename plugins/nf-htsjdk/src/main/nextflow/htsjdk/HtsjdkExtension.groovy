@@ -125,49 +125,22 @@ class HtsjdkExtension extends PluginExtensionPoint {
 		return htsfile.extractDictionary();
     	}
 	
-	@Operator
-	DataflowWriteChannel build(DataflowReadChannel source, Map params = null) {
+    @Function
+	Object build(Object source, Map params = null) {
 		if(params==null) params=[:]
+		final SAMSequenceDictionary dict= SAMSequenceDictionary.class.cast( dictionary(source,[:]) );
+		if(dict==null) return null;
 		//validate params
 		for(Object k: params.keySet()) {
-			if(k.equals("elem")) continue;
-			if(k.equals("header")) continue;
+			if(k.equals("resolveContig")) continue;
 			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
 			}
-			
-		final Object withHeaderObject = params.getOrDefault("header", false);
-		if(!(withHeaderObject instanceof Boolean)) throw new IllegalArgumentException("\"header\" is not a boolean.");
-		final boolean withHeader = Boolean.class.cast(withHeaderObject);
-		final boolean resolveContigName = getConfig().isResolveContigName();
-			
-		// index in row
-		final Object elem = params.getOrDefault("elem", null);
-		final target = CH.createBy(source)
-		final next = {
-			final HtsjdkUtils.HtsSource htsfile = HtsjdkUtils.findHtsSource(it, elem /* element */ ,{HTS->HTS.isBamCramSam() || HTS.isVcf() || HTS.isDict()|| HTS.isFai()| HTS.isFasta()});
-			final SAMSequenceDictionary dict  = htsfile.extractDictionary();
-			final HtsjdkUtils.Build build = (dict==null?null:this.findBuild(withHeader,dict));
-			
+		final boolean resolveContigName = params.containsKey("resolveContig")
+			? (params.get("resolveContig") as boolean)
+			: getConfig().isResolveContigName()
+			;
 		
-			final Map hash=[:];
-			hash.put("build",build==null?".":build.getId());
-			
-			if(!withHeader) {
-				List L = [];
-				for(String k: hash.keySet()) {
-					L.add(hash.get(k));
-					}
-				target.bind(bind2( L, it ));
-				}
-			else
-				{
-				target.bind(bind2( hash, it ));
-				}
-			};
-			
-		final done = { target.bind(Channel.STOP) }
-		DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
-		return target
+		return this.findBuild(resolveContigName,dict);
 		}
 
 	@Function
