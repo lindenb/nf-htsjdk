@@ -166,7 +166,7 @@ class HtsjdkExtension extends PluginExtensionPoint {
 		
 		final Object defaultName = params.getOrDefault("defaultName", null);
 				
-		final HtsjdkUtils.HtsSource htsfile = HtsjdkUtils.findHtsSource(source,{HTS->HTS.isBamCramSam() || HTS.isVcf() });
+		final HtsjdkUtils.HtsSource htsfile = HtsjdkUtils.findHtsSource(source,{HTS->HTS.isBamCramSam() || HTS.isVcf() || HTS.isIntervalList()});
 		def samples = htsfile.extractSamples();
 		if(samples.isEmpty() && defaultName!=null) {
 			samples = Collections.singletonList(defaultName);

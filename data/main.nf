@@ -1,7 +1,18 @@
 include { dictionary; samples ; build } from 'plugin/nf-htsjdk'
 
-local_files_ch = Channel.fromPath(["data/*.bam","data/*.sam","data/*.bcf","data/*.vcf","data/*.vcf.gz","data/*.fai"])
+/** local files */
+local_files_ch = Channel.fromPath([
+	"data/*.bam",
+	"data/*.sam",
+	"data/*.bcf",
+	"data/*.vcf",
+	"data/*.vcf.gz",
+	"data/*.fai",
+	"data/*.interval_list",
+	"data/*.interval_list.gz"
+	])
 
+/** remote files */
 remote_files_ch = Channel.of(
 	"http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa",
 	"http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase1/data/HG00101/exome_alignment/HG00101.mapped.illumina.mosaik.GBR.exome.20110411.bam",

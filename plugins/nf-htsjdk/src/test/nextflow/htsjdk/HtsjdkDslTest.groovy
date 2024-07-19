@@ -83,6 +83,42 @@ class HtsjdkDslTest extends Dsl2Spec{
         
     }
 
+	def 'dictionary with interval_list' () {
+		when:
+		def SCRIPT = '''
+            include {dictionary} from 'plugin/nf-htsjdk'
+            channel
+                .fromPath('../../data/rotavirus_rf.interval_list')
+                .map{[dictionary(it),it]}
+                .flatMap{row->row[0].getSequences().collect{dict->[dict.getContig(),row[1]]}}
+				.take(2)
+        '''
+		and:
+			def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()
+		then:
+			result.val[0] == "RF01"
+			result.val[0] == "RF02"
+			result.val == Channel.STOP
+		}
+	
+		def 'dictionary with compressed interval_list' () {
+			when:
+			def SCRIPT = '''
+            include {dictionary} from 'plugin/nf-htsjdk'
+            channel
+                .fromPath('../../data/rotavirus_rf.interval_list.gz')
+                .map{[dictionary(it),it]}
+                .flatMap{row->row[0].getSequences().collect{dict->[dict.getContig(),row[1]]}}
+				.take(2)
+        '''
+			and:
+				def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()
+			then:
+				result.val[0] == "RF01"
+				result.val[0] == "RF02"
+				result.val == Channel.STOP
+			}
+		
 	def 'dictionary with dict and length' () {
 		when:
 		def SCRIPT = '''
