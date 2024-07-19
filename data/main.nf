@@ -13,13 +13,13 @@ remote_files_ch = Channel.of(
 htsfiles_ch= local_files_ch.mix(remote_files_ch)
 
 
-
+/*
 htsfiles_ch.dictionary(withLength:true).
 	view{"DICTIONARY: ${it}"}
 
 htsfiles_ch.build().
         view{"BUILD: ${it}"}
-
+*/
 
 htsfiles_ch.
 	filter{!(it.toString().endsWith(".fai") || it.toString().endsWith(".fa"))}.

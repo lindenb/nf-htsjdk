@@ -42,6 +42,7 @@ import htsjdk.samtools.SAMSequenceDictionary
 import htsjdk.samtools.SAMException 
 import java.util.Arrays;
 import htsjdk.samtools.util.FileExtensions;
+import htsjdk.samtools.util.StringUtil
 import nextflow.htsjdk.HtsjdkUtils;
 import nextflow.htsjdk.HtsjdkUtils.Build
 
@@ -113,71 +114,15 @@ class HtsjdkExtension extends PluginExtensionPoint {
 			}
 		}
 
-    @Operator
-    DataflowWriteChannel dictionary(DataflowReadChannel source, Map params = null) {
+    @Function
+    Object dictionary(Object source, Map params = null) {
         if(params==null) params=[:]	
 		//validate params
 		for(Object k: params.keySet()) {
-			if(k.equals("header")) continue;
-			if(k.equals("elem")) continue;
-			if(k.equals("withLength")) continue;
-			if(k.equals("withTid")) continue;
-			if(k.equals("chromosomeOnly")) continue;
 			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
-			}
-		final Object withHeaderObject = params.getOrDefault("header", false);
-		if(!(withHeaderObject instanceof Boolean)) throw new IllegalArgumentException("\"header\" is not a boolean.");
-		final boolean withHeader = Boolean.class.cast(withHeaderObject);
-		
-		// index in row
-		final Object elem = params.getOrDefault("elem", null);
-		
-		//include length
-		final Object withLengthObject = params.getOrDefault("withLength", false);
-		if(!(withLengthObject instanceof Boolean)) throw new IllegalArgumentException("\"withLength\" is not a boolean.");
-		final boolean withLength = Boolean.class.cast(withLengthObject);
-		
-
-		//include tid
-		final Object withTidObject = params.getOrDefault("withTid", false);
-		if(!(withTidObject instanceof Boolean)) throw new IllegalArgumentException("\"withTid\" is not a valid boolean.");
-		final boolean withTid = Boolean.class.cast(withTidObject);
-
-				
-		final target = CH.createBy(source)
-        final next = {
-			final HtsjdkUtils.HtsSource htsfile = HtsjdkUtils.findHtsSource(it, elem /* element */ ,{HTS->HTS.isBamCramSam() || HTS.isVcf() || HTS.isDict()|| HTS.isFai()| HTS.isFasta()});
-			final SAMSequenceDictionary dict  = htsfile.extractDictionary();
-			
-			
-			dict.getSequences().each{
-				V->{
-					final Map hash=[:];
-					hash.put("chrom",V.getSequenceName());
-					if(withTid) {
-						hash.put("tid",V.getSequenceIndex());
-						}
-					if(withLength) {
-						hash.put("length",V.getSequenceLength());
-						}
-					if(!withHeader) {
-						List L = [];
-						for(String k: hash.keySet()) {
-							L.add(hash.get(k));
-							}
-						target.bind(bind2( L, it ));
-						}
-					else
-						{
-						target.bind(bind2( hash, it ));
-						}
-					}
-				}
-				
-			};
-        final done = { target.bind(Channel.STOP) }
-        DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
-        return target
+			}		
+		final HtsjdkUtils.HtsSource htsfile = HtsjdkUtils.findHtsSource(source ,{HTS->HTS.isBamCramSam() || HTS.isVcf() || HTS.isDict()|| HTS.isFai()| HTS.isFasta() || HTS.isIntervalList()});
+		return htsfile.extractDictionary();
     	}
 	
 	@Operator
@@ -193,7 +138,7 @@ class HtsjdkExtension extends PluginExtensionPoint {
 		final Object withHeaderObject = params.getOrDefault("header", false);
 		if(!(withHeaderObject instanceof Boolean)) throw new IllegalArgumentException("\"header\" is not a boolean.");
 		final boolean withHeader = Boolean.class.cast(withHeaderObject);
-	
+		final boolean resolveContigName = getConfig().isResolveContigName();
 			
 		// index in row
 		final Object elem = params.getOrDefault("elem", null);
@@ -201,7 +146,7 @@ class HtsjdkExtension extends PluginExtensionPoint {
 		final next = {
 			final HtsjdkUtils.HtsSource htsfile = HtsjdkUtils.findHtsSource(it, elem /* element */ ,{HTS->HTS.isBamCramSam() || HTS.isVcf() || HTS.isDict()|| HTS.isFai()| HTS.isFasta()});
 			final SAMSequenceDictionary dict  = htsfile.extractDictionary();
-			final HtsjdkUtils.Build build = (dict==null?null:this.findBuild(true,dict));
+			final HtsjdkUtils.Build build = (dict==null?null:this.findBuild(withHeader,dict));
 			
 		
 			final Map hash=[:];
@@ -225,58 +170,35 @@ class HtsjdkExtension extends PluginExtensionPoint {
 		return target
 		}
 
-		
-		
-	@Operator
-	DataflowWriteChannel samples(DataflowReadChannel source, Map params = null) {
-        if(params==null) params=[:]	
+	@Function
+	Collection readGroups(Object source, Map params = null) {
+		if(params==null) params=[:]
 		//validate params
 		for(Object k: params.keySet()) {
-			if(k.equals("header")) continue;
-			if(k.equals("elem")) continue;
+			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
+			}
+						
+		final HtsjdkUtils.HtsSource htsfile = HtsjdkUtils.findHtsSource(source,{HTS->HTS.isBamCramSam() || HTS.isIntervalList() });
+		return htsfile.extractReadGroups();
+		}
+		
+	@Function
+	Collection samples(Object source, Map params = null) {
+		if(params==null) params=[:]	
+		//validate params
+		for(Object k: params.keySet()) {
 			if(k.equals("defaultName")) continue;
 			throw new IllegalArgumentException("\""+k+"\" is not a valid key.");
 			}
-		final Object withHeaderObject = params.getOrDefault("header", false);
-		if(!(withHeaderObject instanceof Boolean)) throw new IllegalArgumentException("\"header\" is not a boolean.");
-		final boolean withHeader = Boolean.class.cast(withHeaderObject);
 		
 		final Object defaultName = params.getOrDefault("defaultName", null);
-		
-		// index in row
-		final Object elem = params.getOrDefault("elem", null);
 				
-		final target = CH.createBy(source)
-        final next = {
-			final HtsjdkUtils.HtsSource htsfile = HtsjdkUtils.findHtsSource(it, elem /* element */ ,{HTS->HTS.isBamCramSam() || HTS.isVcf() });
-			def samples = htsfile.extractSamples();
-			if(samples.isEmpty() && defaultName!=null) {
-				samples = Collections.singletonList(defaultName);
-				}
-			
-			
-			samples.each{
-				S->{
-					final Map hash=[:];
-					hash.put("sample",S);
-					if(!withHeader) {
-						List L = [];
-						for(String k: hash.keySet()) {
-							L.add(hash.get(k));
-							}
-						target.bind(bind2( L, it ));
-						}
-					else
-						{
-						target.bind(bind2( hash, it ));
-						}
-					}
-				}
-				
-			};
-        final done = { target.bind(Channel.STOP) }
-        DataflowHelper.subscribeImpl(source, [onNext: next, onComplete: done])
-        return target
+		final HtsjdkUtils.HtsSource htsfile = HtsjdkUtils.findHtsSource(source,{HTS->HTS.isBamCramSam() || HTS.isVcf() });
+		def samples = htsfile.extractSamples();
+		if(samples.isEmpty() && defaultName!=null) {
+			samples = Collections.singletonList(defaultName);
+			}
+		return samples;
 		}
 		
 	private Build findBuild(boolean resolveContig,final SAMSequenceDictionary dict) {

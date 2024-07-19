@@ -23,16 +23,21 @@ import groovy.transform.PackageScope
  */
 @PackageScope
 class HtsjdkConfig {
-
+	final private boolean resolveContigName;
     final private List<HtsjdkUtils.Build> builds
 
     HtsjdkConfig(Map map){
         def config = map ?: Collections.emptyMap()
+		this.resolveContigName = config.resolveContig?:true;
         this.builds = config.containsKey("builds") 
 		? HtsjdkUtils.decodeBuilds(config.get("builds"))
 		: HtsjdkUtils.getDefaultBuilds();
     }
 
+	public boolean isResolveContigName() {
+		return resolveContigName;
+		}
+	
     List<HtsjdkUtils.Build> getBuilds() { 
 		return this.builds;
 		}

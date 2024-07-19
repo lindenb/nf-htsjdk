@@ -31,6 +31,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.Reader;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -75,6 +76,7 @@ import htsjdk.samtools.util.BufferedLineReader;
 import htsjdk.samtools.util.FileExtensions;
 import htsjdk.samtools.util.CloseableIterator;
 import htsjdk.tribble.Tribble;
+import htsjdk.tribble.IntervalList.IntervalListCodec;
 import htsjdk.tribble.index.Index;
 import htsjdk.tribble.index.IndexFactory;
 import htsjdk.tribble.readers.LineIterator;
@@ -93,22 +95,20 @@ import htsjdk.variant.vcf.VCFHeader;
 import htsjdk.variant.vcf.VCFIterator;
 import htsjdk.variant.vcf.VCFIteratorBuilder;
 import htsjdk.samtools.util.IOUtil;
+import htsjdk.samtools.util.IntervalList;
 import htsjdk.samtools.util.StringUtil;
 
 
 
 public class HtsjdkUtils {
     private static final String BUILD_RESOURCE = "/META-INF/builds.xml";
-	static final String KEY_ELEMENT="element";
-	static final String KEY_ENABLE_EMPTY="enableEmpty";
-	static final String NO_SAMPLE=".";
-	static final String NO_CONTIG=".";
 	
 	/** search for compatible contig in a SAMSequenceDictionary */
 	private static interface ContigMatcher {
 		abstract public  boolean test(boolean resolveChromosome,final SAMSequenceDictionary dict);
 		}
 	
+	/** matcher for contig name and contig length */
 	private static class ContigLengthMatcher implements ContigMatcher {
 		private final String contigName;
 		private final int contigLen;
@@ -118,13 +118,18 @@ public class HtsjdkUtils {
 			}
 		@Override
 		public boolean test(boolean resolveChromosome,final SAMSequenceDictionary dict) {
+			if(!resolveChromosome) {
+				final SAMSequenceRecord ssr= dict.getSequence(this.contigName);
+				if(ssr==null) return false;
+				return ssr.getSequenceLength()==this.contigLen;
+				}
+			
 			return dict.getSequences().
 					stream().
-					anyMatch(SRR->contigLen==(SRR.getSequenceLength()) && contigsMatch(resolveChromosome,contigName,SRR.getContig()));
+					anyMatch(SRR->contigLen==(SRR.getSequenceLength()) && contigsMatch(contigName,SRR.getContig()));
 			
 			}
-		private boolean contigsMatch(boolean resolveChromosome,String s1,String s2) {
-			if(!resolveChromosome) return s1.equals(s2);
+		private boolean contigsMatch(String s1,String s2) {
 			return simpleChromName(s1).equals(simpleChromName(s2));
 			}
 		
@@ -215,6 +220,11 @@ public class HtsjdkUtils {
         default boolean isDict() {
             return hasSuffix(FileExtensions.DICT);
             }
+        default boolean isIntervalList() {
+        	 return hasSuffix(FileExtensions.INTERVAL_LIST) || hasSuffix(FileExtensions.COMPRESSED_INTERVAL_LIST);
+        	}
+        
+        
         Path asPath();
         HtsSource resolveSibling(String fn);
         
@@ -235,6 +245,11 @@ public class HtsjdkUtils {
         	}
         
     	public default SAMFileHeader extractSamFileHeader() throws IOException {
+    		if(isIntervalList()) {
+    			try(BufferedReader r=this.openBufferedReader()) {
+    				return IntervalList.fromReader(r).getHeader();
+    				}
+    			}
     		if(!isBamCramSam()) {
     			throw new SAMException("not a valid extension for BAM "+getPath());
     			}
@@ -243,6 +258,10 @@ public class HtsjdkUtils {
     				return sr.getFileHeader();
     				}
     			}
+    		}
+    	public default List<SAMReadGroupRecord> extractReadGroups() throws IOException {
+    		final SAMFileHeader header= extractSamFileHeader();
+    		return header==null?Collections.emptyList():header.getReadGroups();
     		}
     	
     	public default VCFHeader extractVcfHeader() throws IOException {
@@ -319,10 +338,9 @@ public class HtsjdkUtils {
     		if(this.isVcf()) {
     			return extractVcfHeader().getGenotypeSamples();
     			}
-    		else if(this.isBamCramSam()) {
+    		else if(this.isBamCramSam() || this.isIntervalList()) {
     			final String rgAtt=StringUtil.isBlank(rgAttribute)?SAMReadGroupRecord.READ_GROUP_SAMPLE_TAG:rgAttribute;
-				return extractSamFileHeader().
-					getReadGroups().
+				return extractReadGroups().
 					stream().
 					map(RG->RG.getAttribute(rgAtt)).
 					filter(SM->!StringUtil.isBlank(SM)).
@@ -517,6 +535,7 @@ public class HtsjdkUtils {
 
    
 
+   @SuppressWarnings("rawtypes")
    static List<Build> decodeBuilds(final Object o1) {
 	if(o1==null) {
 		return getDefaultBuilds();
@@ -683,6 +702,27 @@ public class HtsjdkUtils {
     		}
     	}
 
+    
+
+    /**
+     * convert Object 'source ' to 'HtsSource'
+     */
+    static HtsSource findHtsSource(final Object source, final Predicate<HtsSource> acceptHtsSource)  {
+    	if(source==null) {
+    		throw new IllegalArgumentException("source cannot be null");
+    		}
+    	final HtsSource htsSource = toHtsSource(source).orElse(null);
+		if(htsSource==null) {
+			throw new IllegalArgumentException("Cannot convert "+source+" to HTS file");
+			}
+		if(!acceptHtsSource.test(htsSource)) {
+			throw new IllegalArgumentException("HTS file "+source+" was found but has no valid suffixes");
+			}
+    	
+		return htsSource;
+    	}
+
+    
 	private static InputStream mayBeGzippedInputStream(InputStream in) throws IOException {
 	    // wrap the input stream into a BufferedInputStream to reset/read a BCFHeader or a GZIP
 	    // buffer must be large enough to contain the BCF header and/or GZIP signature
@@ -696,16 +736,8 @@ public class HtsjdkUtils {
 	    return bufferedinput;
 		}
 
-	/** predicate finding chromosome in SAMSequenceDictionary */
-	private static boolean hasContig(final SAMSequenceDictionary dict, String ctg,final int expLen) {
-	    SAMSequenceRecord ssr = dict.getSequence(ctg);
-	    if(ssr==null) {
-	        ctg=(ctg.startsWith("chr")?ctg.substring(3):"chr"+ctg);
-	        ssr = dict.getSequence(ctg);
-	        }
-	    if(ssr==null) return false;
-	    return ssr.getSequenceLength()==expLen;
-	    }
+	
+	
 
 	/** extract VCFHeader from stream. Once decoded, the stream is invalid (uncompressed, bytes skipped, etc..) */
 	private static VCFHeader decodeVCFHeader(InputStream in0) throws IOException {

@@ -70,7 +70,8 @@ class HtsjdkDslTest extends Dsl2Spec{
             include {dictionary} from 'plugin/nf-htsjdk'
             channel
                 .fromPath('../../data/rotavirus_rf.dict')
-                .dictionary()
+                .map{[dictionary(it),it]}
+                .flatMap{row->row[0].getSequences().collect{dict->[dict.getContig(),row[1]]}}
 				.take(2)
         '''
         and:
@@ -88,14 +89,15 @@ class HtsjdkDslTest extends Dsl2Spec{
             include {dictionary} from 'plugin/nf-htsjdk'
             channel
                 .fromPath('../../data/rotavirus_rf.dict')
-                .dictionary(withLength:true)
+                .map{[dictionary(it),it]}
+                .flatMap{row->row[0].getSequences().collect{dict->[dict.getLengthOnReference(),row[1]]}}
 				.take(2)
         '''
 		and:
 			def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()
 		then:
-			result.val[1] == 3302
-			result.val[1] == 2687
+			result.val[0] == 3302
+			result.val[0] == 2687
 			result.val == Channel.STOP
 		
 	}
@@ -106,14 +108,15 @@ class HtsjdkDslTest extends Dsl2Spec{
             include {dictionary} from 'plugin/nf-htsjdk'
             channel
                 .fromPath('../../data/rotavirus_rf.dict')
-                .dictionary(withTid:true)
+                .map{[dictionary(it),it]}
+                .flatMap{row->row[0].getSequences().collect{dict->[dict.getSequenceIndex(),row[1]]}}
 				.take(2)
         '''
 		and:
 			def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()
 		then:
-			result.val[1] == 0
-			result.val[1] == 1
+			result.val[0] == 0
+			result.val[0] == 1
 			result.val == Channel.STOP
 		
 	}
@@ -125,7 +128,8 @@ class HtsjdkDslTest extends Dsl2Spec{
             include {dictionary} from 'plugin/nf-htsjdk'
             channel
                 .fromPath('../../data/S1.rota.bam')
-                .dictionary()
+                .map{[dictionary(it),it]}
+                .flatMap{row->row[0].getSequences().collect{dict->[dict.getContig(),row[1]]}}
 				.take(2)
         '''
 		and:
@@ -143,7 +147,8 @@ class HtsjdkDslTest extends Dsl2Spec{
             include {dictionary} from 'plugin/nf-htsjdk'
             channel
                 .fromPath('../../data/rotavirus_rf.vcf.gz')
-                .dictionary()
+                .map{[dictionary(it),it]}
+                .flatMap{row->row[0].getSequences().collect{dict->[dict.getContig(),row[1]]}}
 				.take(2)
         '''
 		and:
@@ -161,8 +166,10 @@ class HtsjdkDslTest extends Dsl2Spec{
             include {dictionary} from 'plugin/nf-htsjdk'
             channel
                 .fromPath('../../data/rotavirus_rf.bcf')
-                .dictionary()
+                .map{[dictionary(it),it]}
+                .flatMap{row->row[0].getSequences().collect{dict->[dict.getContig(),row[1]]}}
 				.take(2)
+
         '''
 		and:
 			def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()
@@ -173,23 +180,6 @@ class HtsjdkDslTest extends Dsl2Spec{
 		
 	}
 	
-	def 'dictionary with dict with header=true' () {
-		when:
-		def SCRIPT = '''
-            include {dictionary} from 'plugin/nf-htsjdk'
-            channel
-                .fromPath('../../data/rotavirus_rf.dict')
-                .dictionary(header:true)
-				.take(2)
-        '''
-		and:
-			def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()
-		then:
-			result.val[0].chrom == "RF01"
-			result.val[0].chrom == "RF02"
-			result.val == Channel.STOP
-		
-	}
 
 	def 'samples with vcf' () {
 		when:
@@ -197,7 +187,8 @@ class HtsjdkDslTest extends Dsl2Spec{
             include {samples} from 'plugin/nf-htsjdk'
             channel
                 .fromPath('../../data/rotavirus_rf.vcf.gz')
-                .samples()
+                .map{[samples(it),it]}
+                .flatMap{row->row[0].collect{sn->[sn,row[1]]}}
 				.take(2)
         '''
 		and:
@@ -215,7 +206,8 @@ class HtsjdkDslTest extends Dsl2Spec{
             include {samples} from 'plugin/nf-htsjdk'
             channel
                 .fromPath('../../data/rotavirus_rf.bcf')
-                .samples()
+                .map{[samples(it),it]}
+                .flatMap{row->row[0].collect{sn->[sn,row[1]]}}
 				.take(2)
         '''
 		and:
@@ -223,6 +215,40 @@ class HtsjdkDslTest extends Dsl2Spec{
 		then:
 			result.val[0] == "S1"
 			result.val[0] == "S2"
+			result.val == Channel.STOP
+		
+	}
+
+	def 'samples with sam' () {
+		when:
+		def SCRIPT = '''
+            include {samples} from 'plugin/nf-htsjdk'
+            channel
+                .fromPath('../../data/S1.rota.bam')
+                .map{[samples(it),it]}
+                .flatMap{row->row[0].collect{sn->[sn,row[1]]}}
+        '''
+		and:
+			def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()
+		then:
+			result.val[0] == "S1"
+			result.val == Channel.STOP
+		
+	}
+	
+	def 'readGroups with sam' () {
+		when:
+		def SCRIPT = '''
+            include {readGroups} from 'plugin/nf-htsjdk'
+            channel
+                .fromPath('../../data/S1.rota.bam')
+                .map{[readGroups(it),it]}
+                .flatMap{row->row[0].collect{sn->[sn.getLibrary(),row[1]]}}
+        '''
+		and:
+			def result = new MockScriptRunner([:]).setScript(SCRIPT).execute()
+		then:
+			result.val[0] == "L1"
 			result.val == Channel.STOP
 		
 	}
