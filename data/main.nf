@@ -13,16 +13,22 @@ remote_files_ch = Channel.of(
 htsfiles_ch= local_files_ch.mix(remote_files_ch)
 
 
-/*
-htsfiles_ch.dictionary(withLength:true).
-	view{"DICTIONARY: ${it}"}
 
-htsfiles_ch.build().
-        view{"BUILD: ${it}"}
-*/
+htsfiles_ch.
+	map{[build(it),it]}.
+	map{[it[0]==null?"NO_BUILD":it[0].getId(),it[1]]}.
+	view{"BUILD: ${it}"}
+
+
+htsfiles_ch.                
+	map{[dictionary(it),it]}.
+        flatMap{row->row[0].getSequences().collect{dict->[dict.getContig(),row[1]]}}.
+	filter{it[0].matches("((chr)?[12]|RF.*)")}.
+        view{"DICTIONARY: ${it}"}
 
 htsfiles_ch.
 	filter{!(it.toString().endsWith(".fai") || it.toString().endsWith(".fa"))}.
-	samples(defaultName:"NO_SAMPLE").
+        map{[samples(it,["defaultName":"NO_SAMPLE"]),it]}.
+        flatMap{row->row[0].collect{sn->[sn,row[1]]}}.
 	view{"SAMPLE: ${it}"}
 
